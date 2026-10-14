@@ -114,7 +114,7 @@ a { color:var(--blue); }
   .print-header img { height:34px; width:auto; }
 }
 </style>
-<link rel="stylesheet" href="css/tarifas.css?v=2.8">
+<link rel="stylesheet" href="css/tarifas.css?v=3.6">
 </head>
 <body>
 <div class="wrap">
@@ -140,8 +140,8 @@ a { color:var(--blue); }
       <select id="fUbic"><option value="">Todas</option><option value="Alajuela">Alajuela</option><option value="Angol">Angol</option><option value="Antofagasta">Antofagasta</option><option value="Araucanía">Araucanía</option><option value="Arequipa">Arequipa</option><option value="Arica">Arica</option><option value="Aysén">Aysén</option><option value="Biobío">Biobío</option><option value="Calama">Calama</option><option value="Caldera">Caldera</option><option value="Callao">Callao</option><option value="Cartago">Cartago</option><option value="Cauquenes">Cauquenes</option><option value="Chillan">Chillan</option><option value="Chiloé">Chiloé</option><option value="Chosica">Chosica</option><option value="Comas">Comas</option><option value="Concepción">Concepción</option><option value="Copiapó">Copiapó</option><option value="Coquimbo">Coquimbo</option><option value="Coronel">Coronel</option><option value="Coyhaique">Coyhaique</option><option value="Curicó">Curicó</option><option value="El Salvador">El Salvador</option><option value="Futaleufú">Futaleufú</option><option value="Heredia">Heredia</option><option value="Huancayo">Huancayo</option><option value="Huasco">Huasco</option><option value="Iquique">Iquique</option><option value="Isla de Pascua">Isla de Pascua</option><option value="La Pintana">La Pintana</option><option value="Lima">Lima</option><option value="Linares">Linares</option><option value="Los Andes">Los Andes</option><option value="Los Ángeles">Los Ángeles</option><option value="Los Ríos">Los Ríos</option><option value="Lurigancho">Lurigancho</option><option value="Maitencillo">Maitencillo</option><option value="maule">maule</option><option value="Melipilla">Melipilla</option><option value="Nacional">Nacional</option><option value="Ñuble">Ñuble</option><option value="O&#39;Higgins">O'Higgins</option><option value="Osorno">Osorno</option><option value="Ovalle">Ovalle</option><option value="Paracas">Paracas</option><option value="Pucón">Pucón</option><option value="Puerto Montt">Puerto Montt</option><option value="Puerto Varas">Puerto Varas</option><option value="Punta Arenas">Punta Arenas</option><option value="Quilpué">Quilpué</option><option value="Quintero">Quintero</option><option value="Rancagua">Rancagua</option><option value="Region de Aysen">Region de Aysen</option><option value="Region de los Lagos">Region de los Lagos</option><option value="Region de los Rios">Region de los Rios</option><option value="RM">RM</option><option value="Salamanca">Salamanca</option><option value="San Antonio">San Antonio</option><option value="San Felipe">San Felipe</option><option value="San Fernando">San Fernando</option><option value="San José">San José</option><option value="San Luis">San Luis</option><option value="Santa Anita">Santa Anita</option><option value="Santa Clara">Santa Clara</option><option value="Santa Cruz">Santa Cruz</option><option value="Serena">Serena</option><option value="Talca">Talca</option><option value="Talcahuano">Talcahuano</option><option value="Tarapacá">Tarapacá</option><option value="Temuco">Temuco</option><option value="Tierra Amarilla">Tierra Amarilla</option><option value="Tocopilla">Tocopilla</option><option value="Trujillo">Trujillo</option><option value="Valdivia">Valdivia</option><option value="Valle del Elqui">Valle del Elqui</option><option value="Vallenar">Vallenar</option><option value="Valparaíso">Valparaíso</option><option value="Villarrica">Villarrica</option><option value="Viña del mar">Viña del mar</option></select>
     </div>
     <div>
-      <label>Buscar por nombre</label>
-      <input type="text" id="fText" placeholder="Nombre del proveedor...">
+      <label>Buscar por nombre o RUT</label>
+      <input type="text" id="fText" placeholder="Nombre o RUT del proveedor...">
     </div>
     <div>
       <label>Filtrar por empresa cliente</label>
@@ -169,16 +169,16 @@ a { color:var(--blue); }
   </div>
   <div id="viewTar" style="display:none">
     <div class="controls tar-controls">
-      <div class="span2"><label>Residuos</label><div id="tfResiduoBox"></div></div>
-      <div class="span2"><label>Comunas</label><div id="tfComunaBox"></div></div>
+      <div class="span2"><label>1 · Residuos</label><div id="tfResiduoBox"></div></div>
+      <div><label>2 · Proveedor (nombre o RUT)</label><input type="text" id="tfProveedor" list="provDL" placeholder="Nombre o RUT..." autocomplete="off"></div>
+      <div><label>3 · Región</label><select id="tfRegion"></select></div>
+      <div><label>4 · Comunas</label><div id="tfComunaBox"></div></div>
       <div><label>Estado servicio</label><select id="tfServicio"><option value="">Todos</option></select></div>
       <div><label>Tipo</label><select id="tfTipo"><option value="">Cobra y paga</option><option value="cobra">Cobra</option><option value="paga">Paga</option></select></div>
       <div><label>Empresa</label><input type="text" id="tfEmpresa" list="clienteDL" placeholder="Ej: COPEC" autocomplete="off"></div>
       <div><label>Sucursal</label><input type="text" id="tfSucursal" list="tfSucursalDL" placeholder="Ej: PAD Maipu" autocomplete="off"><datalist id="tfSucursalDL"></datalist></div>
-      <div><label>Region</label><select id="tfRegion"></select></div>
       <div><label>Unidad</label><select id="tfUnidad"></select></div>
       <div><label>Estado cliente</label><select id="tfEstado"><option value="">Todos</option><option>activo</option><option>inactivo</option><option>prospecto</option></select></div>
-      <div class="span2"><label>Proveedor, empresa o sucursal</label><input type="text" id="tfTexto" placeholder="Buscar..."></div>
       <div class="estados">
         <label class="chk"><input type="checkbox" id="tfAlertas"> Solo con alertas &#9888;</label>
         <label class="chk"><input type="checkbox" id="tfAnteriores"> Mostrar valores anteriores</label>
@@ -196,7 +196,7 @@ a { color:var(--blue); }
   </div>
   <div id="viewSin" style="display:none">
     <div class="controls tar-controls">
-      <div class="span2"><label>Razón social, establecimiento o RUT</label><input type="text" id="sfTexto" placeholder="Buscar..."></div>
+      <div class="span2"><label>Razón social, establecimiento, RUT o código RETC</label><input type="text" id="sfTexto" placeholder="Buscar..."></div>
       <div><label>Región</label><select id="sfRegion"></select></div>
       <div><label>Comuna</label><select id="sfComuna"></select></div>
       <div><label>Nivel 1</label><select id="sfN1"></select></div>
@@ -227,9 +227,9 @@ a { color:var(--blue); }
 </div>
 
 <!-- ?v=: subir el número al publicar cambios en estos archivos, para que el navegador no use la copia vieja -->
-<script src="js/comunas.js?v=2.8"></script>
-<script src="js/tarifas.js?v=2.8"></script>
-<script src="js/sinader.js?v=2.8"></script>
+<script src="js/comunas.js?v=3.6"></script>
+<script src="js/tarifas.js?v=3.6"></script>
+<script src="js/sinader.js?v=3.6"></script>
 <script>
 /* ============================================================
    FUENTES DE DATOS (lectura via gviz)
@@ -381,6 +381,9 @@ async function loadMirror(){
     telefono: col("Contacto telefonico","Telefono"),
     web: col("Pagina WEB","Web"),
     rut: col("Rut de la empresa","Rut"),
+    // "CF: Nombre" es la persona de contacto; col("Nombre") calzaría con el nombre de la tarea
+    contactoNombre: (rows[0]||[]).findIndex(h=> hnorm(h)==="cf: nombre"),
+    contactoCargo: col("Cargo laboral"),
     url: col("URL"),
     comentarios: col("Comentarios")
   };
@@ -406,6 +409,7 @@ async function loadMirror(){
                     : ((pPje!=null && pPje>=0 && pPje<=5) ? pPje : 0);
     const situacion=get(r,ci.situacion), movimiento=get(r,ci.movimiento);
     const correo=get(r,ci.correo), telefono=get(r,ci.telefono), web=get(r,ci.web), rut=get(r,ci.rut);
+    const contactoNombre=get(r,ci.contactoNombre), contactoCargo=/^x+$/i.test(get(r,ci.contactoCargo)) ? "" : get(r,ci.contactoCargo);
     const comentarios = get(r,ci.comentarios);
     const id = get(r,ci.id) || ("row-"+i);
     const url = get(r,ci.url);
@@ -414,7 +418,7 @@ async function loadMirror(){
     const s = {
       id, name, url, estado,
       residuos, residuoTxt, areas, ubicTxt, direccion, cobertura, ubicAll, residuosAll,
-      estrellas, puntaje:pPje, situacion, movimiento, correo, telefono, web, rut, comentarios,
+      estrellas, puntaje:pPje, situacion, movimiento, correo, telefono, web, rut, contactoNombre, contactoCargo, comentarios,
       clientes: [],
       score:0, sheetOnly:false
     };
@@ -629,6 +633,7 @@ function render(){
   const res = document.getElementById("fResiduo").value;
   const ubic = document.getElementById("fUbic").value;
   const text = document.getElementById("fText").value.trim().toLowerCase();
+  const textRut = rutClave(text);
   const empresa = document.getElementById("fEmpresa").value.trim();
   const estados = activeEstados();
   const list = document.getElementById("list");
@@ -637,7 +642,7 @@ function render(){
     if(estados.indexOf(estadoBucket(s.estado))===-1) return false;
     if(res && !s.residuos.some(r=>norm(r)===norm(res))) return false;
     if(ubic){ const uk=norm(ubic); if(!s.areas.some(a=>norm(a)===uk) && norm(s.ubicAll||"").indexOf(uk)===-1) return false; }
-    if(text && s.name.toLowerCase().indexOf(text)===-1) return false;
+    if(text && s.name.toLowerCase().indexOf(text)===-1 && !(textRut.length>=4 && rutClave(s.rut).indexOf(textRut)!==-1)) return false;
     if(empresa){
       const ek = norm(empresa);
       const match = s.clientes.some(c=> norm(c[0]||"").indexOf(ek)!==-1 || norm(c[1]||"").indexOf(ek)!==-1);
@@ -669,11 +674,7 @@ function render(){
     if(s.movimiento) meta.push('<span class="badge b-sit">Mov: '+esc(s.movimiento)+'</span>');
     if(s.puntaje!=null) meta.push('<span class="badge b-sit">Puntaje: '+s.puntaje+'</span>');
     const sinB = sinaderBadgeProveedor(s);
-    const contact = [];
-    if(s.correo) contact.push('<a href="mailto:'+esc(s.correo)+'">'+esc(s.correo)+'</a>');
-    if(s.web) contact.push('<a href="'+esc(s.web)+'" target="_blank">web</a>');
-    if(s.telefono) contact.push(esc(s.telefono));
-    const contactLine = contact.length ? '<div class="meta"><b>Contacto:</b> '+contact.join(' - ')+'</div>' : '';
+    const contactLine = contactoHtml(s);
     const servLine = '';
     return ''+
     '<div class="card '+(s.estado==="vetados"?"vetado":"")+(s.estado==="planilla"?"planilla":"")+'">'+
@@ -685,14 +686,31 @@ function render(){
         '</div>'+
         '<div class="score"><div class="num">'+s.score+'</div><div class="lbl">score</div></div>'+
       '</div>'+
-      (resChips?'<div class="chips">'+resChips+'</div>':'')+
+      contactLine +
+      (resChips?'<div class="meta" style="margin-top:8px"><b>Residuos que gestiona:</b></div><div class="chips">'+resChips+'</div>':'')+
       servLine + tarifasResumenProveedor(s) +
-      areaLine + contactLine +
+      areaLine +
       (meta.length?'<div class="badges">'+meta.join(' ')+'</div>':'')+
       cli +
       '<div class="detail" id="d-'+s.id+'"><span class="toggle-hint">Ver detalle...</span></div>'+
     '</div>';
   }).join('');
+}
+
+/** Bloque de contacto de la tarjeta: persona, correo, teléfono, web, RUT y acceso a la tarjeta de ClickUp. */
+function contactoHtml(s){
+  const persona = [s.contactoNombre, s.contactoCargo].filter(Boolean).map(esc).join(' · ');
+  const dato = (etq, html) => '<span class="ct-dato"><span class="ct-etq">'+etq+'</span> '+html+'</span>';
+  const datos = [];
+  if(persona) datos.push(dato('Persona', persona));
+  if(s.correo) datos.push(dato('Correo', '<a href="mailto:'+esc(s.correo)+'">'+esc(s.correo)+'</a>'));
+  if(s.telefono) datos.push(dato('Teléfono', esc(s.telefono)));
+  if(s.web) datos.push(dato('Web', '<a href="'+esc(/^https?:/i.test(s.web)?s.web:'https://'+s.web)+'" target="_blank" rel="noopener">'+esc(s.web.replace(/^https?:\/\/(www\.)?/i,'').replace(/\/$/,''))+'</a>'));
+  if(s.rut) datos.push(dato('RUT', esc(s.rut)));
+  const cu = s.url ? '<a class="ct-clickup" href="'+esc(s.url)+'" target="_blank" rel="noopener">Abrir en ClickUp ↗</a>' : '';
+  if(s.sheetOnly) return '<div class="contacto"><span class="toggle-hint">Proveedor fuera del ecosistema: sin ficha en ClickUp</span>'+botonCrearFicha(s.name)+'</div>';
+  if(!datos.length && !cu) return '';
+  return '<div class="contacto">'+(datos.length ? datos.join('') : '<span class="toggle-hint">Sin datos de contacto en ClickUp</span>')+cu+'</div>';
 }
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
@@ -705,11 +723,9 @@ function toggle(id){
   const s = SUPPLIERS.find(x=>x.id===id);
   if(!s) return;
   const extra = [];
-  if(s.rut) extra.push('<div class="meta"><b>RUT:</b> '+esc(s.rut)+'</div>');
   if(s.direccion) extra.push('<div class="meta"><b>Direccion:</b> '+esc(s.direccion)+'</div>');
   if(s.cobertura) extra.push('<div class="meta"><b>Cobertura:</b> '+esc(s.cobertura)+'</div>');
   if(s.movimiento) extra.push('<div class="meta"><b>Movimiento:</b> '+esc(s.movimiento)+'</div>');
-  if(s.url) extra.push('<div class="meta"><a href="'+esc(s.url)+'" target="_blank">Abrir ficha en ClickUp</a></div>');
   extra.push(tarifasDetalleProveedor(s));
   extra.push(sinaderDetalleProveedor(s));
 

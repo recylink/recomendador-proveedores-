@@ -496,6 +496,7 @@ function filaGrupoHtml(ts, opts) {
   const dato = (etq, html) => '<div class="t-dato"><span class="t-etq">' + etq + '</span>' + html + '</div>';
   const detalle =
     '<tr class="t-detalle" data-det="' + gid + '" style="display:none"><td colspan="' + columnas + '">' +
+      (opts.sinProveedor ? '' : contactoProveedorTarifa(t0)) +
       '<div class="t-datos">' +
         dato("Contenedor / vehículo", lista(ts.map(t => t.contenedor), 6)) +
         dato("Transporte", esc(t0.incluye_transporte === "no" ? "No incluye" : "Incluye")) +
@@ -513,6 +514,85 @@ function filaGrupoHtml(ts, opts) {
       '</table></div>' +
     '</td></tr>';
   return principal + detalle;
+}
+/* ---------------- ficha BD en ClickUp para proveedores fuera del ecosistema ---------------- */
+function botonCrearFicha(nombre) {
+  return '<button class="ct-clickup mini ct-nueva" onclick="event.stopPropagation();abrirFichaClickUp(' + esc(JSON.stringify(nombre || "")) + ')">+ Crear ficha en ClickUp</button>';
+}
+const ACTORES = ["Gestor de residuos", "Transportista", "Destinatario Final", "Asesor", "N/A"];
+const CATEGORIAS = ["Transporte y disposición de residuos", "Tratamiento de residuos (almacenamiento, valorización y/o eliminación)", "Gestor REP", "Reciclador base", "Otros"];
+let FICHA_NOMBRE = "";
+
+/** Formulario de contacto; al guardar crea la tarjeta BD y le liga las tarifas de ese proveedor. */
+function abrirFichaClickUp(nombre) {
+  FICHA_NOMBRE = nombre;
+  const ts = TARIFAS.filter(t => t.activo && !tget(t, "proveedor_id") && norm(t.proveedor_nombre) === norm(nombre));
+  const residuos = unicosOrdenados(ts.map(t => t.residuo)), regiones = unicosOrdenados(ts.map(t => t.region));
+  const dir = (ts.find(t => t.direccion) || {}).direccion || "";
+  abrirModal("fichaModal",
+    '<h3>Crear ficha en ClickUp</h3>' +
+    '<div class="muted small">Se crea en Control Ecosistema 2.0 con estado <b>BD</b>, Situación Atención y País Chile. Sus ' + ts.length + ' tarifa(s) quedan ligadas a la ficha.</div>' +
+    '<div class="tf-grid">' +
+      campo("c_nombre", "Nombre del proveedor *", inp("c_nombre", nombre), "span2") +
+      campo("c_persona", "Persona de contacto", inp("c_persona", "")) +
+      campo("c_cargo", "Cargo", inp("c_cargo", "")) +
+      campo("c_correo", "Correo", inp("c_correo", "", 'type="email"')) +
+      campo("c_telefono", "Teléfono", inp("c_telefono", "", 'placeholder="+56 9 ..."')) +
+      campo("c_web", "Página web", inp("c_web", "")) +
+      campo("c_rut", "RUT de la empresa", inp("c_rut", "", 'placeholder="76.123.456-7"')) +
+      campo("c_direccion", "Dirección", inp("c_direccion", dir), "span2") +
+      campo("c_actor", "Actor", sel("c_actor", ACTORES, ACTORES[0])) +
+      campo("c_categoria", "Categoría de servicios", sel("c_categoria", CATEGORIAS, CATEGORIAS[0])) +
+      '<div class="tf-campo span2 small"><b>Residuos</b> (desde sus tarifas): ' + (esc(residuos.join(", ")) || '<span class="muted">-</span>') +
+        '<br><b>Área de acción</b>: ' + (esc(regiones.join(", ")) || '<span class="muted">-</span>') + '</div>' +
+    '</div>' +
+    '<div class="tf-acc"><span id="c_status" class="muted small"></span><button class="cbtn" id="c_guardar" onclick="guardarFichaClickUp()">Crear ficha</button></div>');
+}
+
+async function guardarFichaClickUp() {
+  const st = document.getElementById("c_status"), btn = document.getElementById("c_guardar");
+  const g = id => ((document.getElementById(id) || {}).value || "").trim();
+  const ts = TARIFAS.filter(t => t.activo && !tget(t, "proveedor_id") && norm(t.proveedor_nombre) === norm(FICHA_NOMBRE));
+  const datos = {
+    nombre: g("c_nombre"), nombre_anterior: FICHA_NOMBRE, contacto_nombre: g("c_persona"), cargo: g("c_cargo"),
+    correo: g("c_correo"), telefono: g("c_telefono"), web: g("c_web"), rut: g("c_rut"), direccion: g("c_direccion"),
+    actor: g("c_actor"), categoria: g("c_categoria"),
+    residuos: unicosOrdenados(ts.map(t => t.residuo)), regiones: unicosOrdenados(ts.map(t => t.region))
+  };
+  if (!datos.nombre) { st.textContent = "Falta el nombre."; return; }
+  if (datos.correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.correo)) { st.textContent = "Revisa el correo."; return; }
+  btn.disabled = true; st.textContent = "Creando la ficha en ClickUp…";
+  try {
+    const r = await api("proveedor_crear", { proveedor: datos }, true);
+    st.textContent = "Ficha creada. Actualizando la lista…";
+    await refrescarTrasGuardar(r.tarifas || []);
+    // El backend ya agregó la fila al espejo; se relee hasta verla (gviz puede tardar unos segundos)
+    for (let i = 0; i < 4; i++) {
+      const lista = await loadMirror();
+      if (lista.some(x => x.id === r.id)) { SUPPLIERS = lista; break; }
+      await new Promise(res => setTimeout(res, 2500));
+    }
+    aplicarTarifasAProveedores(); refreshProvDL(); populateFilters(); render(); renderTarifas();
+    st.innerHTML = 'Listo. <a href="' + esc(r.url) + '" target="_blank" rel="noopener">Abrir en ClickUp ↗</a>';
+    setTimeout(() => cerrarModal("fichaModal"), 2500);
+  } catch (e) {
+    st.textContent = "Error: " + e.message;
+  } finally { btn.disabled = false; }
+}
+
+/** Contacto breve para la fila cerrada (persona, correo, teléfono y botón ClickUp); los clics no despliegan la fila. */
+function contactoCortoTarifa(t) {
+  const s = proveedorDeTarifa(t);
+  if (!s || s.sheetOnly) return '<div class="ct-corto" onclick="event.stopPropagation()"><div class="muted small">sin ficha en ClickUp</div>' + botonCrearFicha(t.proveedor_nombre) + '</div>';
+  const d = [s.contactoNombre, s.correo ? '<a href="mailto:' + esc(s.correo) + '">' + esc(s.correo) + '</a>' : '', s.telefono ? esc(s.telefono) : ''].filter(Boolean);
+  return '<div class="ct-corto" onclick="event.stopPropagation()">' + (d.length ? '<div class="small">' + d.map(x => x === s.contactoNombre ? esc(x) : x).join(' · ') + '</div>' : '') +
+    (s.url ? '<a class="ct-clickup mini" href="' + esc(s.url) + '" target="_blank" rel="noopener">Abrir en ClickUp ↗</a>' : '') + '</div>';
+}
+/** Contacto y acceso a ClickUp del proveedor de la tarifa ("" si no tiene ficha). */
+function contactoProveedorTarifa(t) {
+  const s = proveedorDeTarifa(t);
+  if (!s || s.sheetOnly || typeof contactoHtml !== "function") return "";
+  return '<div class="t-etq">Contacto de ' + esc(s.name) + '</div>' + contactoHtml(s);
 }
 /** Detalles del cobro distintos dentro del grupo; si hay más de uno, indica a qué sucursal/residuo aplica cada uno. */
 function detallesCobroHtml(ts) {
@@ -593,10 +673,24 @@ function poblarFiltrosTarifas() {
   set("tfUnidad", TARIFAS.map(t => t.unidad), "Todas");
   set("tfServicio", (CATS.estado_servicio || []).concat(TARIFAS.map(t => t.estado_servicio)), "Todos");
   mselOpciones("tfResiduo", unicosOrdenados(TARIFAS.map(t => t.residuo)));
-  mselOpciones("tfComuna", unicosOrdenados(TARIFAS.map(t => t.comuna)));
+  comunasSegunRegion();
   const dl = document.getElementById("clienteDL");
   if (dl) dl.innerHTML = unicosOrdenados(TARIFAS.map(t => t.cliente)).map(c => '<option value="' + esc(c) + '">').join('');
   actualizarSucursalDL("tfSucursalDL", (document.getElementById("tfEmpresa") || {}).value);
+}
+
+/** Comunas del filtro limitadas a la región elegida; quita las ya elegidas que no son de esa región. */
+function comunasSegunRegion() {
+  const reg = (document.getElementById("tfRegion") || {}).value || "";
+  const coms = unicosOrdenados(TARIFAS.filter(t => !reg || t.region === reg).map(t => t.comuna));
+  if (MSEL.tfComuna) MSEL.tfComuna.valores = MSEL.tfComuna.valores.filter(v => coms.some(c => norm(c) === norm(v)));
+  mselOpciones("tfComuna", coms);
+}
+
+/** Proveedor de ClickUp de una tarifa (por ID de tarea o por nombre). */
+function proveedorDeTarifa(t) {
+  if (typeof SUPPLIERS === "undefined") return null;
+  return SUPPLIERS.find(s => s.id === t.provKey) || SUPPLIERS.find(s => "n:" + norm(s.name) === t.provKey) || null;
 }
 
 function actualizarSucursalDL(dlId, empresa) {
@@ -610,7 +704,13 @@ function renderTarifas() {
   const chk = id => !!(document.getElementById(id) || {}).checked;
   const fRes = mselValores("tfResiduo").map(norm), fCom = mselValores("tfComuna").map(norm);
   const fReg = g("tfRegion"), fUni = g("tfUnidad"), fEst = g("tfEstado"), fTipo = g("tfTipo"), fServ = norm(g("tfServicio"));
-  const fEmp = norm(g("tfEmpresa")), fSuc = norm(g("tfSucursal")), fTxt = norm(g("tfTexto"));
+  const fEmp = norm(g("tfEmpresa")), fSuc = norm(g("tfSucursal")), fProv = norm(g("tfProveedor")), fProvRut = rutClave(g("tfProveedor"));
+  const calzaProveedor = t => {
+    if (norm(t.proveedor_nombre).indexOf(fProv) !== -1) return true;
+    if (fProvRut.length < 4) return false;
+    const s = proveedorDeTarifa(t);
+    return !!s && rutClave(s.rut).indexOf(fProvRut) !== -1;
+  };
   const verAnt = chk("tfAnteriores"), verBaja = chk("tfBajas"), soloAl = chk("tfAlertas");
 
   const ufInfo = document.getElementById("ufInfo");
@@ -622,19 +722,58 @@ function renderTarifas() {
     && (!fReg || t.region === fReg) && (!fUni || t.unidad === fUni)
     && (!fEst || t.estado_cliente === fEst) && (!fTipo || t.tipo === fTipo) && (!fServ || norm(t.estado_servicio) === fServ)
     && (!fEmp || norm(t.cliente).indexOf(fEmp) !== -1) && (!fSuc || norm(t.sucursal).indexOf(fSuc) !== -1)
-    && (!fTxt || norm(t.proveedor_nombre + " " + t.cliente + " " + t.sucursal).indexOf(fTxt) !== -1)
+    && (!fProv || calzaProveedor(t))
     && (!soloAl || (t.alertas && t.alertas.length))
     && (t.vigente || !t.activo || verAnt));
 
-  document.getElementById("tarCount").textContent = lista.length + " tarifa(s) · " + TARIFAS_STATUS;
+  if (!lista.length) document.getElementById("tarCount").textContent = "0 tarifa(s) · " + TARIFAS_STATUS;
   if (!lista.length) { box.innerHTML = '<div class="empty">' + (TARIFAS.length ? "Sin tarifas para el filtro actual." : "Aún no hay tarifas cargadas. Usa “+ Nueva tarifa” o “Pegar desde Claude”.") + '</div>'; return; }
 
-  const grupos = agruparPorCondiciones(lista).sort((a, b) =>
-    String(a[0].proveedor_nombre).localeCompare(String(b[0].proveedor_nombre), "es") ||
-    String(a[0].cliente).localeCompare(String(b[0].cliente), "es") ||
-    (b[0].vigente - a[0].vigente));
-  box.innerHTML = '<div class="tgrupo"><div class="tscroll"><table class="ttar t-compacta">' + encabezadoCompacto(false) +
-    grupos.map(gr => filaGrupoHtml(gr)).join('') + '</table></div></div>';
+  const porProv = {}, orden = [];
+  lista.forEach(t => { if (!porProv[t.provKey]) { porProv[t.provKey] = []; orden.push(t.provKey); } porProv[t.provKey].push(t); });
+  const provs = orden.map(k => porProv[k]).sort((a, b) => String(a[0].proveedor_nombre).localeCompare(String(b[0].proveedor_nombre), "es"));
+  document.getElementById("tarCount").textContent = provs.length + " proveedor(es) · " + lista.length + " tarifa(s) · " + TARIFAS_STATUS;
+  box.innerHTML = '<div class="tgrupo"><div class="tscroll"><table class="ttar t-compacta">' +
+    '<tr><th>Proveedor</th><th>Residuos</th><th>Tarifa referencial</th><th>Empresas</th><th>Actualizado</th></tr>' +
+    provs.map(filaProveedorHtml).join('') + '</table></div></div>';
+}
+
+/** Una fila por proveedor con su tarifa referencial; al hacer clic: contacto, referencial y cobros por cliente/sucursal. */
+function filaProveedorHtml(ts) {
+  const gid = "g" + (++GRUPO_SEQ);
+  const t0 = ts[0];
+  const alertas = ts.filter(t => t.alertas && t.alertas.length).length;
+  const conPrecio = referenciales(ts).filter(f => f.conPrecio);
+  const refCorta = conPrecio.length
+    ? conPrecio.slice(0, 3).map(f => '<div class="small">' + esc(f.residuo) + ' ' + refPrecioHtml(f) + '</div>').join('') + (conPrecio.length > 3 ? '<div class="muted small">+' + (conPrecio.length - 3) + ' más</div>' : '')
+    : '<span class="muted">sin precio</span>';
+  const empresas = unicosOrdenados(ts.filter(t => !esGeneral(t)).map(t => t.cliente));
+  const actualizado = ts.map(t => String(t.actualizado_el || t.fecha || "").slice(0, 10)).sort().pop();
+  const principal =
+    '<tr class="t-fila" onclick="verDetalle(\'' + gid + '\', this)">' +
+      '<td><span class="t-flecha">▸</span> <b>' + esc(t0.proveedor_nombre || "-") + '</b>' + (alertas ? ' <span class="t-alerta">⚠ ' + alertas + '</span>' : '') +
+        '<div class="muted small">' + ts.length + ' tarifa' + (ts.length > 1 ? 's' : '') + '</div>' + contactoCortoTarifa(t0) + '</td>' +
+      '<td>' + listaCorta(ts.map(t => t.residuo), 4) + '</td>' +
+      '<td class="num">' + refCorta + '</td>' +
+      '<td>' + (empresas.length ? listaCorta(empresas, 3) : '<span class="muted">Valor general</span>') + '</td>' +
+      '<td class="small">' + esc(actualizado || "-") + '</td>' +
+    '</tr>';
+  const orden = t => [esGeneral(t) ? "0" : "1", t.cliente, t.sucursal, t.residuo, t.vigente ? "0" : "1"].map(v => String(v || "")).join("|");
+  const filas = ts.slice().sort((a, b) => orden(a).localeCompare(orden(b), "es"));
+  const bloques = agruparPorCondiciones(ts).filter(g => g.length > 1 && g[0].activo);
+  const precioCorto = t => t.precio_num == null ? "sin precio" : t.moneda === "UF" ? fmtNum(t.precio_num) + " UF" : fmtCLP(t.precio_num);
+  const detalle =
+    '<tr class="t-detalle" data-det="' + gid + '" style="display:none"><td colspan="5">' +
+      contactoProveedorTarifa(t0) +
+      referencialHtml(ts) +
+      (bloques.length ? '<div class="t-acciones"><span class="muted small">Editar en bloque:</span> ' + bloques.map(g =>
+        '<button class="cbtn sec mini" onclick="abrirFormGrupo(\'' + esc(g[0].id) + '\')">' + esc(unicosOrdenados(g.map(t => t.residuo)).join(", ")) + ' · ' + esc(precioCorto(g[0])) + ' (' + g.length + ')</button>').join(' ') + '</div>' : '') +
+      '<div class="t-etq" style="margin-top:8px">Detalle de cobro por cliente y sucursal</div>' +
+      '<div class="tscroll"><table class="ttar t-indiv"><tr><th>Empresa / sucursal</th><th>Servicio y detalle del cobro</th><th>Lugar</th><th>Precio</th><th>Fecha / fuente</th><th></th><th></th></tr>' +
+        filas.map(t => filaTarifaHtml(t, { sinProveedor: true, conServicio: true })).join('') +
+      '</table></div>' +
+    '</td></tr>';
+  return principal + detalle;
 }
 
 /* ---------------- integración con la lista de proveedores ----------------
@@ -685,22 +824,67 @@ function aplicarTarifasAProveedores() {
 /** Empresas con tarifas activas (para el informe por empresa). */
 function empresasConTarifas() { return unicosOrdenados(TARIFAS.filter(t => t.activo).map(t => t.cliente)); }
 
-function tarifasResumenProveedor(s) {
-  const ts = tarifasDeProveedor(s);
-  if (!ts.length) return "";
-  const n = ts.filter(t => t.alertas && t.alertas.length).length;
-  const res = unicosOrdenados(ts.map(t => t.residuo)).slice(0, 4).join(", ");
-  return '<div class="meta"><b>Tarifas:</b> ' + ts.length + ' registrada(s)' + (res ? ' · ' + esc(res) : '') + (n ? ' · <span class="t-alerta">⚠ ' + n + '</span>' : '') + '</div>';
+/**
+ * Tarifa referencial por residuo y unidad (solo vigentes): el "Valor general" ingresado a mano si existe;
+ * si no, el promedio de lo cobrado a los clientes. Un residuo "sin precio" solo aparece si no tiene otro valor.
+ */
+function referenciales(ts) {
+  const grupos = {}, orden = [];
+  ts.filter(t => t.vigente && t.activo).forEach(t => {
+    const k = t.tipo + "|" + norm(t.residuo) + "|" + norm(t.unidad);
+    if (!grupos[k]) { grupos[k] = []; orden.push(k); }
+    grupos[k].push(t);
+  });
+  return orden.map(k => {
+    const g = grupos[k], gen = g.filter(esGeneral), base = gen.length ? gen : g;
+    const vals = base.map(clpDe).filter(v => v != null && v > 1);
+    const prom = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+    const ref = prom(vals);
+    // Sin valor UF del día: se promedia en UF en vez de dejarlo "sin precio"
+    const valsUF = ref == null ? base.filter(t => t.moneda === "UF" && t.precio_num > 0).map(t => t.precio_num) : [];
+    const refUF = prom(valsUF);
+    const min = Math.min(...vals), max = Math.max(...vals), t0 = g[0];
+    const nota = refUF != null ? (gen.length ? "valor general (ingresado)" : valsUF.length + " servicio(s) · UF del día no disponible") : ref == null ? "" : gen.length ? "valor general (ingresado)" :
+      (vals.length === 1 ? "1 servicio" : min === max ? vals.length + " servicios, mismo valor" : "promedio de " + vals.length + " servicios · " + fmtCLP(min) + "–" + fmtCLP(max));
+    // Valor general más reciente (es el que se edita desde la tabla de referenciales)
+    const genT = gen.slice().sort((a, b) => String(b.fecha + b.actualizado_el).localeCompare(String(a.fecha + a.actualizado_el)))[0];
+    return { residuo: t0.residuo || "(sin residuo)", unidad: t0.unidad, paga: t0.tipo === "paga", tipo: t0.tipo, proveedor: t0.proveedor_nombre, genId: genT ? genT.id : "", clave: t0.tipo + "|" + norm(t0.residuo), ref, refUF, conPrecio: ref != null || refUF != null, nota };
+  }).filter((f, i, arr) => f.conPrecio || !arr.some(o => o.conPrecio && o.clave === f.clave))
+    .sort((a, b) => a.residuo.localeCompare(b.residuo, "es"));
 }
+function refPrecioHtml(f) {
+  return !f.conPrecio ? '<span class="muted">sin precio</span>'
+    : '<b class="' + (f.paga ? "t-paga" : "") + '">' + (f.paga ? "+" : "") + (f.ref != null ? fmtCLP(f.ref) : fmtNum(f.refUF, 2) + " UF") + '</b>' + (f.unidad ? ' <span class="muted">/ ' + esc(f.unidad) + '</span>' : '');
+}
+/** Tabla de referenciales con su origen (valor general o promedio). */
+function referencialHtml(ts) {
+  const filas = referenciales(ts);
+  if (!filas.length) return "";
+  const n = ts.filter(t => t.vigente && t.alertas && t.alertas.length).length;
+  return '<div class="ref-box"><span class="t-etq">Tarifa referencial' + (n ? ' <span class="t-alerta">⚠ ' + n + '</span>' : '') + '</span>' +
+    '<table class="ttar ref-tab">' + filas.map(f => '<tr><td>' + esc(f.residuo) + (f.paga ? ' <span class="pill p-paga">paga</span>' : '') + '</td><td class="num">' + refPrecioHtml(f) + '</td><td class="muted small">' + esc(f.nota) + '</td><td>' + botonReferencial(f) + '</td></tr>').join('') + '</table></div>';
+}
+/** "Editar" abre el Valor general existente; "Fijar valor" abre uno nuevo con el promedio ya escrito. */
+function botonReferencial(f) {
+  if (f.genId) return '<button class="lnk" onclick="event.stopPropagation();abrirFormTarifa(\'' + esc(f.genId) + '\')">Editar</button>';
+  const pre = { proveedor_nombre: f.proveedor, residuo: f.residuo === "(sin residuo)" ? "" : f.residuo, unidad: f.unidad || "", estado_servicio: "Valor general", tipo_transaccion: f.tipo, fuente: "informal",
+    precio: f.ref != null ? Math.round(f.ref) : f.refUF != null ? Math.round(f.refUF * 100) / 100 : "", moneda: f.ref == null && f.refUF != null ? "UF" : "CLP" };
+  return '<button class="lnk" title="Crear un Valor general que reemplaza al promedio" onclick="event.stopPropagation();abrirFormTarifa(null,' + esc(JSON.stringify(pre)) + ')">Fijar valor</button>';
+}
+function tarifasResumenProveedor(s) { return referencialHtml(tarifasDeProveedor(s)); }
 
+/** Tarifa efectiva de cada sucursal, con su detalle del cobro y acciones. */
 function tarifasDetalleProveedor(s) {
   const ts = tarifasDeProveedor(s);
   marcarVigentes(TARIFAS.filter(t => t.activo));
-  const head = '<div class="meta" style="margin-top:10px;"><b>Tarifas</b> <button class="lnk" onclick="abrirFormTarifa(null,{proveedor_nombre:' + esc(JSON.stringify(s.name)) + '})">+ Agregar tarifa</button></div>';
+  const head = '<div class="meta" style="margin-top:10px;"><b>Tarifa por sucursal</b> <button class="lnk" onclick="abrirFormTarifa(null,{proveedor_nombre:' + esc(JSON.stringify(s.name)) + '})">+ Agregar tarifa</button></div>';
   if (!ts.length) return head + '<span class="toggle-hint">Sin tarifas registradas.</span>';
-  ts.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
-  return head + '<div class="tscroll"><table class="ttar t-compacta">' + encabezadoCompacto(true) +
-    agruparPorCondiciones(ts).map(gr => filaGrupoHtml(gr, { sinProveedor: true })).join('') + '</table></div>';
+  const vig = ts.filter(t => t.vigente), ant = ts.length - vig.length;
+  const orden = t => [esGeneral(t) ? "0" : "1", t.cliente, t.sucursal, t.residuo].map(v => String(v || "")).join("|");
+  vig.sort((a, b) => orden(a).localeCompare(orden(b), "es"));
+  return head + '<div class="tscroll"><table class="ttar t-indiv"><tr><th>Empresa / sucursal</th><th>Servicio y detalle del cobro</th><th>Lugar</th><th>Precio</th><th>Fecha / fuente</th><th></th><th></th></tr>' +
+    vig.map(t => filaTarifaHtml(t, { sinProveedor: true, conServicio: true })).join('') + '</table></div>' +
+    (ant ? '<div class="muted small">' + ant + ' valor(es) anterior(es) no se muestran: ver en la pestaña Tarifas con "Mostrar valores anteriores".</div>' : '');
 }
 
 /* ---------------- modales ---------------- */
@@ -1224,8 +1408,9 @@ function tarifasInit() {
   renderAuthBox();
   document.getElementById("tfResiduoBox").innerHTML = mselHtml("tfResiduo", { placeholder: "Todos (+ agregar)", onChange: renderTarifas });
   document.getElementById("tfComunaBox").innerHTML = mselHtml("tfComuna", { placeholder: "Todas (+ agregar)", onChange: renderTarifas });
+  document.getElementById("tfRegion").addEventListener("change", comunasSegunRegion);
   ["tfRegion", "tfUnidad", "tfEstado", "tfTipo", "tfServicio", "tfAnteriores", "tfBajas", "tfAlertas"].forEach(id => document.getElementById(id).addEventListener("change", renderTarifas));
-  ["tfTexto", "tfSucursal"].forEach(id => document.getElementById(id).addEventListener("input", renderTarifas));
+  ["tfProveedor", "tfSucursal"].forEach(id => document.getElementById(id).addEventListener("input", renderTarifas));
   document.getElementById("tfEmpresa").addEventListener("input", e => { actualizarSucursalDL("tfSucursalDL", e.target.value); renderTarifas(); });
   sinaderInit();
   const vista = lsGet("rp_vista");

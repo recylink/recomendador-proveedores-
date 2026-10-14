@@ -134,7 +134,7 @@ function sinaderFiltrados(sinEco) {
     const en = !!e.rk && ruts.has(e.rk);
     if (eco === "si" && !en) return;
     if (eco === "no" && en) return;
-    if (txt && norm(e.razon + " " + e.nombre).indexOf(txt) === -1 && !(txtRut.length >= 4 && e.rk.indexOf(txtRut) !== -1)) return;
+    if (txt && norm(e.razon + " " + e.nombre + " " + e.codigo).indexOf(txt) === -1 && !(txtRut.length >= 4 && e.rk.indexOf(txtRut) !== -1)) return;
     const trat = e.trat.filter(t => (!soloAct || t.activo) && (!n1 || t.n1 === n1) && (!n2 || t.n2 === n2) && (!n3 || t.n3 === n3));
     if (!trat.length) return;
     out.push({ e, trat, en });
