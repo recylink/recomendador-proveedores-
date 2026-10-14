@@ -580,6 +580,74 @@ async function guardarFichaClickUp() {
   } finally { btn.disabled = false; }
 }
 
+/* ---------------- editar contacto y clasificación de una ficha existente ---------------- */
+let FICHA_EDIT = null; // { id, valores } leídos de ClickUp al abrir
+function botonEditarFicha(id) {
+  return '<button class="ct-editar" onclick="event.stopPropagation();abrirEditarFicha(\'' + esc(id) + '\')">Editar ficha</button>';
+}
+async function abrirEditarFicha(id) {
+  abrirModal("fichaEditModal", '<h3>Editar ficha</h3><div class="spinner-row"><span class="spinner"></span> Leyendo la ficha desde ClickUp…</div>');
+  try {
+    const f = await api("proveedor_ficha", { id }, true);
+    FICHA_EDIT = { id: f.id, valores: f.valores };
+    const v = f.valores, op = f.opciones;
+    const actores = op.actor.indexOf(v.actor) === -1 && v.actor ? [v.actor].concat(op.actor) : op.actor;
+    abrirModal("fichaEditModal",
+      '<h3>Editar ficha · ' + esc(f.nombre) + '</h3>' +
+      '<div class="muted small">Los cambios se guardan en ClickUp y quedan registrados como comentario en la tarjeta. Estado y situación se cambian en ClickUp.</div>' +
+      '<div class="tf-grid">' +
+        campo("e_persona", "Persona de contacto", inp("e_persona", v.contacto_nombre)) +
+        campo("e_cargo", "Cargo", inp("e_cargo", v.cargo)) +
+        campo("e_correo", "Correo", inp("e_correo", v.correo, 'type="email"')) +
+        campo("e_telefono", "Teléfono", inp("e_telefono", v.telefono)) +
+        campo("e_web", "Página web", inp("e_web", v.web)) +
+        campo("e_rut", "RUT de la empresa", inp("e_rut", v.rut)) +
+        campo("e_direccion", "Dirección", inp("e_direccion", v.direccion), "span2") +
+        campo("e_especialidad", "Residuos (Especialidad)", mselHtml("e_especialidad", { opciones: op.especialidad, valores: v.especialidad, placeholder: "+ agregar residuo" }), "span2") +
+        campo("e_areas", "Área de acción", mselHtml("e_areas", { opciones: op.areas, valores: v.areas, placeholder: "+ agregar zona" }), "span2") +
+        campo("e_categorias", "Categoría de servicios", mselHtml("e_categorias", { opciones: op.categorias, valores: v.categorias, placeholder: "+ agregar categoría" }), "span2") +
+        campo("e_actor", "Actor", sel("e_actor", actores, v.actor)) +
+      '</div>' +
+      '<div class="tf-acc"><span id="e_status" class="muted small"></span>' +
+        '<a class="lnk" href="' + esc(f.url) + '" target="_blank" rel="noopener">Abrir en ClickUp ↗</a>' +
+        '<button class="cbtn" id="e_guardar" onclick="guardarEditarFicha()">Guardar en ClickUp</button></div>');
+  } catch (e) {
+    abrirModal("fichaEditModal", '<h3>Editar ficha</h3><p class="warn">No se pudo leer la ficha: ' + esc(e.message) + '</p>');
+  }
+}
+async function guardarEditarFicha() {
+  const st = document.getElementById("e_status"), btn = document.getElementById("e_guardar");
+  const g = id => ((document.getElementById(id) || {}).value || "").trim();
+  const nuevo = {
+    contacto_nombre: g("e_persona"), cargo: g("e_cargo"), correo: g("e_correo"), telefono: g("e_telefono"),
+    web: g("e_web"), rut: g("e_rut"), direccion: g("e_direccion"), actor: g("e_actor"),
+    especialidad: mselValores("e_especialidad"), areas: mselValores("e_areas"), categorias: mselValores("e_categorias")
+  };
+  if (nuevo.correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nuevo.correo)) { st.textContent = "Revisa el correo."; return; }
+  const antes = FICHA_EDIT.valores, cambios = {};
+  const lista = l => (l || []).map(norm).sort().join("|");
+  Object.keys(nuevo).forEach(k => {
+    const distinto = Array.isArray(nuevo[k]) ? lista(nuevo[k]) !== lista(antes[k]) : nuevo[k] !== (antes[k] || "");
+    if (distinto) cambios[k] = nuevo[k];
+  });
+  if (!Object.keys(cambios).length) { st.textContent = "Sin cambios."; return; }
+  btn.disabled = true; st.textContent = "Guardando en ClickUp…";
+  try {
+    const r = await api("proveedor_editar", { id: FICHA_EDIT.id, cambios }, true);
+    // Se refleja al tiro en la web; el espejo ya quedó actualizado por el backend
+    const s = SUPPLIERS.find(x => x.id === FICHA_EDIT.id);
+    if (s) {
+      Object.assign(s, { contactoNombre: nuevo.contacto_nombre, contactoCargo: nuevo.cargo, correo: nuevo.correo, telefono: nuevo.telefono, web: nuevo.web, rut: nuevo.rut, direccion: nuevo.direccion, areas: nuevo.areas });
+      if ("especialidad" in cambios) s.residuos = nuevo.especialidad.slice();
+      aplicarTarifasAProveedores(); populateFilters(); render(); renderTarifas();
+    }
+    st.textContent = "Guardado (" + r.cambios + " campo(s))." + (r.noEncontradas && r.noEncontradas.length ? " No existen en ClickUp: " + r.noEncontradas.join(", ") : "");
+    setTimeout(() => cerrarModal("fichaEditModal"), 1500);
+  } catch (e) {
+    st.textContent = "Error: " + e.message;
+  } finally { btn.disabled = false; }
+}
+
 /** Contacto breve para la fila cerrada (persona, correo, teléfono y botón ClickUp); los clics no despliegan la fila. */
 function contactoCortoTarifa(t) {
   const s = proveedorDeTarifa(t);

@@ -114,7 +114,7 @@ a { color:var(--blue); }
   .print-header img { height:34px; width:auto; }
 }
 </style>
-<link rel="stylesheet" href="css/tarifas.css?v=3.6">
+<link rel="stylesheet" href="css/tarifas.css?v=3.7">
 </head>
 <body>
 <div class="wrap">
@@ -227,9 +227,9 @@ a { color:var(--blue); }
 </div>
 
 <!-- ?v=: subir el número al publicar cambios en estos archivos, para que el navegador no use la copia vieja -->
-<script src="js/comunas.js?v=3.6"></script>
-<script src="js/tarifas.js?v=3.6"></script>
-<script src="js/sinader.js?v=3.6"></script>
+<script src="js/comunas.js?v=3.7"></script>
+<script src="js/tarifas.js?v=3.7"></script>
+<script src="js/sinader.js?v=3.7"></script>
 <script>
 /* ============================================================
    FUENTES DE DATOS (lectura via gviz)
@@ -707,7 +707,7 @@ function contactoHtml(s){
   if(s.telefono) datos.push(dato('Teléfono', esc(s.telefono)));
   if(s.web) datos.push(dato('Web', '<a href="'+esc(/^https?:/i.test(s.web)?s.web:'https://'+s.web)+'" target="_blank" rel="noopener">'+esc(s.web.replace(/^https?:\/\/(www\.)?/i,'').replace(/\/$/,''))+'</a>'));
   if(s.rut) datos.push(dato('RUT', esc(s.rut)));
-  const cu = s.url ? '<a class="ct-clickup" href="'+esc(s.url)+'" target="_blank" rel="noopener">Abrir en ClickUp ↗</a>' : '';
+  const cu = s.url ? '<span class="ct-acciones">'+botonEditarFicha(s.id)+'<a class="ct-clickup" href="'+esc(s.url)+'" target="_blank" rel="noopener">Abrir en ClickUp ↗</a></span>' : '';
   if(s.sheetOnly) return '<div class="contacto"><span class="toggle-hint">Proveedor fuera del ecosistema: sin ficha en ClickUp</span>'+botonCrearFicha(s.name)+'</div>';
   if(!datos.length && !cu) return '';
   return '<div class="contacto">'+(datos.length ? datos.join('') : '<span class="toggle-hint">Sin datos de contacto en ClickUp</span>')+cu+'</div>';

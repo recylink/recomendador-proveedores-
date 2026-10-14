@@ -171,3 +171,7 @@ tr.abierta .t-flecha { transform:rotate(90deg); }
 .ct-clickup.mini { display:inline-block; margin:3px 0 0; padding:2px 8px; font-size:11px; }
 .ct-nueva { border:none; cursor:pointer; background:#2BAA4A; }
 .ct-nueva:hover { background:#1f8a3a; }
+.ct-acciones { margin-left:auto; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.ct-acciones .ct-clickup { margin-left:0; }
+.ct-editar { padding:5px 10px; background:#fff; color:var(--blue-d); border:1px solid var(--sky); border-radius:7px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.ct-editar:hover { background:#eef6fb; }
