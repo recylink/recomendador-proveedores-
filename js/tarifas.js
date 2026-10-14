@@ -164,6 +164,18 @@ window.addEventListener("message", ev => {
 });
 
 /* ---------------- API (Apps Script) ---------------- */
+/** El backend sumó residuos a la Especialidad en ClickUp al guardar una tarifa: se reflejan sin recargar. */
+function residuosAgregadosEnClickUp(porId) {
+  if (typeof SUPPLIERS === "undefined") return;
+  Object.keys(porId).forEach(id => {
+    const s = SUPPLIERS.find(x => x.id === id); if (!s) return;
+    porId[id].forEach(r => {
+      if (!(s.residuosCU || []).some(x => norm(x) === norm(r))) (s.residuosCU = s.residuosCU || []).push(r);
+      if (!(s.residuos || []).some(x => norm(x) === norm(r))) (s.residuos = s.residuos || []).push(r);
+    });
+  });
+}
+
 async function api(action, payload, conSesion) {
   const body = Object.assign({ action, reqId: nuevoReqId() }, payload || {});
   if (conSesion) {
@@ -187,6 +199,7 @@ async function api(action, payload, conSesion) {
     if (data.auth) cerrarSesion();
     throw new Error((data.error || "Error desconocido").replace(/^AUTH:\s*/, ""));
   }
+  if (data.data && data.data._residuosClickUp) residuosAgregadosEnClickUp(data.data._residuosClickUp);
   return data.data || {};
 }
 
@@ -649,7 +662,7 @@ async function guardarEditarFicha() {
     const s = SUPPLIERS.find(x => x.id === FICHA_EDIT.id);
     if (s) {
       Object.assign(s, { contactoNombre: nuevo.contacto_nombre, contactoCargo: nuevo.cargo, correo: nuevo.correo, telefono: nuevo.telefono, web: nuevo.web, rut: nuevo.rut, direccion: nuevo.direccion, areas: nuevo.areas });
-      if ("especialidad" in cambios) s.residuos = nuevo.especialidad.slice();
+      if ("especialidad" in cambios) { s.residuos = nuevo.especialidad.slice(); s.residuosCU = nuevo.especialidad.slice(); }
       aplicarTarifasAProveedores(); populateFilters(); render(); renderTarifas();
     }
     st.textContent = "Guardado (" + r.cambios + " campo(s))." + (r.noEncontradas && r.noEncontradas.length ? " No existen en ClickUp: " + r.noEncontradas.join(", ") : "");
@@ -817,6 +830,18 @@ function renderTarifas() {
     provs.map(filaProveedorHtml).join('') + '</table></div></div>';
 }
 
+/** Columna Residuos: los que el proveedor gestiona según ClickUp (si no tiene ficha, los de sus tarifas). */
+function residuosFilaHtml(t0, ts) {
+  const sup = proveedorDeTarifa(t0);
+  const cu = (sup && sup.residuosCU) || [];
+  const nota = sup && !sup.sheetOnly ? "según sus tarifas (sin residuos cargados en ClickUp)" : "según sus tarifas (sin ficha en ClickUp)";
+  const lista = cu.length ? unicosOrdenados(cu) : unicosOrdenados(ts.map(t => t.residuo)).filter(r => !/^sin especificar$/i.test(r));
+  if (!lista.length) return '<span class="muted">-</span>';
+  const max = 6;
+  return '<div class="res-fila">' + lista.slice(0, max).map(r => '<span class="chip">' + esc(r) + '</span>').join('') +
+    (lista.length > max ? '<span class="muted small" title="' + esc(lista.slice(max).join(", ")) + '">+' + (lista.length - max) + '</span>' : '') +
+    '</div>' + (cu.length ? '' : '<div class="muted small">' + nota + '</div>');
+}
 /** Una fila por proveedor con su tarifa referencial; al hacer clic: contacto, referencial y cobros por cliente/sucursal. */
 function filaProveedorHtml(ts) {
   const gid = "g" + (++GRUPO_SEQ);
@@ -832,7 +857,7 @@ function filaProveedorHtml(ts) {
     '<tr class="t-fila" onclick="verDetalle(\'' + gid + '\', this)">' +
       '<td><span class="t-flecha">▸</span> <b>' + esc(t0.proveedor_nombre || "-") + '</b>' + (alertas ? ' <span class="t-alerta">⚠ ' + alertas + '</span>' : '') +
         '<div class="muted small">' + ts.length + ' tarifa' + (ts.length > 1 ? 's' : '') + '</div>' + contactoCortoTarifa(t0) + '</td>' +
-      '<td>' + listaCorta(ts.map(t => t.residuo), 4) + '</td>' +
+      '<td>' + residuosFilaHtml(t0, ts) + '</td>' +
       '<td class="num">' + refCorta + '</td>' +
       '<td>' + (empresas.length ? listaCorta(empresas, 3) : '<span class="muted">Valor general</span>') + '</td>' +
       '<td class="small">' + esc(actualizado || "-") + '</td>' +
@@ -844,10 +869,11 @@ function filaProveedorHtml(ts) {
   const detalle =
     '<tr class="t-detalle" data-det="' + gid + '" style="display:none"><td colspan="5">' +
       contactoProveedorTarifa(t0) +
-      referencialHtml(ts) +
+      referencialHtml(ts, { proveedor: t0.proveedor_nombre, titulo: "Residuos que gestiona y tarifa referencial",
+        residuosCU: ((proveedorDeTarifa(t0) || {}).residuosCU) || [] }) +
       (bloques.length ? '<div class="t-acciones"><span class="muted small">Editar en bloque:</span> ' + bloques.map(g =>
         '<button class="cbtn sec mini" onclick="abrirFormGrupo(\'' + esc(g[0].id) + '\')">' + esc(unicosOrdenados(g.map(t => t.residuo)).join(", ")) + ' · ' + esc(precioCorto(g[0])) + ' (' + g.length + ')</button>').join(' ') + '</div>' : '') +
-      '<div class="t-etq" style="margin-top:8px">Detalle de cobro por cliente y sucursal</div>' +
+      '<div class="sec-tit"><span class="t-etq">Detalle de cobro por cliente y sucursal</span>' + botonNuevaTarifaCliente(t0.proveedor_nombre) + '</div>' +
       '<div class="tscroll"><table class="ttar t-indiv"><tr><th>Empresa / sucursal</th><th>Servicio y detalle del cobro</th><th>Lugar</th><th>Precio</th><th>Fecha / fuente</th><th></th><th></th></tr>' +
         filas.map(t => filaTarifaHtml(t, { sinProveedor: true, conServicio: true })).join('') +
       '</table></div>' +
@@ -936,27 +962,71 @@ function refPrecioHtml(f) {
     : '<b class="' + (f.paga ? "t-paga" : "") + '">' + (f.paga ? "+" : "") + (f.ref != null ? fmtCLP(f.ref) : fmtNum(f.refUF, 2) + " UF") + '</b>' + (f.unidad ? ' <span class="muted">/ ' + esc(f.unidad) + '</span>' : '');
 }
 /** Tabla de referenciales con su origen (valor general o promedio). */
-function referencialHtml(ts) {
-  const filas = referenciales(ts);
-  if (!filas.length) return "";
+/**
+ * opts (tarjeta de Proveedores): { residuosCU, proveedor, titulo } agrega los residuos que el proveedor
+ * gestiona según ClickUp aunque no tengan tarifas, para poder fijarles referencial o cargar una tarifa de cliente.
+ */
+function referencialHtml(ts, opts) {
+  opts = opts || {};
+  // "Sin especificar" viene de la carga inicial (relación proveedor-cliente sin residuo ni precio): no es una referencia
+  const filas = referenciales(ts).filter(f => f.conPrecio || !/^(\(sin residuo\)|sin especificar)$/i.test(String(f.residuo).trim()));
+  if (opts.soloConPrecio) { const conValor = filas.filter(f => f.conPrecio); filas.length = 0; filas.push(...conValor); }
+  const vistos = new Set(filas.map(f => norm(f.residuo)));
+  (opts.residuosCU || []).forEach(r => {
+    if (!r || vistos.has(norm(r))) return;
+    vistos.add(norm(r));
+    filas.push({ residuo: r, unidad: "", paga: false, tipo: "cobra", proveedor: opts.proveedor, ref: null, refUF: null, conPrecio: false, nota: "sin tarifas registradas", sinTarifas: true });
+  });
+  if (!filas.length) return opts.proveedor && !opts.soloConPrecio ? '<div class="ref-box"><span class="t-etq">' + esc(opts.titulo || "Tarifa referencial") + '</span><div class="sec-acc">' + botonNuevaReferencial(opts.proveedor) + '</div></div>' : "";
+  filas.sort((a, b) => (b.conPrecio - a.conPrecio) || String(a.residuo).localeCompare(String(b.residuo), "es"));
+  filas.forEach(f => { if (!f.proveedor) f.proveedor = opts.proveedor; });
   const n = ts.filter(t => t.vigente && t.alertas && t.alertas.length).length;
-  return '<div class="ref-box"><span class="t-etq">Tarifa referencial' + (n ? ' <span class="t-alerta">⚠ ' + n + '</span>' : '') + '</span>' +
-    '<table class="ttar ref-tab">' + filas.map(f => '<tr><td>' + esc(f.residuo) + (f.paga ? ' <span class="pill p-paga">paga</span>' : '') + '</td><td class="num">' + refPrecioHtml(f) + '</td><td class="muted small">' + esc(f.nota) + '</td><td>' + botonReferencial(f) + '</td></tr>').join('') + '</table></div>';
+  return '<div class="ref-box"><span class="t-etq">' + esc(opts.titulo || "Tarifa referencial") + (n ? ' <span class="t-alerta">⚠ ' + n + '</span>' : '') + '</span>' +
+    '<table class="ttar ref-tab">' + filas.map(f => '<tr' + (f.sinTarifas ? ' class="ref-sin"' : '') + '><td>' + esc(f.residuo) + (f.paga ? ' <span class="pill p-paga">paga</span>' : '') + '</td><td class="num">' + (f.sinTarifas ? '<span class="muted">—</span>' : refPrecioHtml(f)) + '</td><td class="muted small">' + esc(f.nota) + '</td>' +
+      '<td><span class="ref-acc">' + botonReferencial(f) + '</span></td></tr>').join('') + '</table>' +
+    (opts.proveedor && !opts.soloConPrecio ? '<div class="sec-acc">' + botonNuevaReferencial(opts.proveedor) + '</div>' : '') + '</div>';
+}
+/** "+ Tarifa referencial": Valor general (precio de lista, sin cliente); los residuos se eligen en el formulario. */
+function botonNuevaReferencial(proveedor) {
+  const pre = { proveedor_nombre: proveedor, estado_servicio: "Valor general", tipo_transaccion: "cobra", fuente: "informal" };
+  return '<button class="cbtn sec mini" title="Precio de lista del proveedor, sin cliente: reemplaza al promedio" onclick="event.stopPropagation();abrirFormTarifa(null,' + esc(JSON.stringify(pre)) + ')">+ Tarifa referencial</button>';
+}
+/** "+ Tarifa cliente": lo que el proveedor cobra a una empresa/sucursal. */
+function botonNuevaTarifaCliente(proveedor) {
+  const pre = { proveedor_nombre: proveedor, estado_servicio: "Activo", tipo_transaccion: "cobra" };
+  return '<button class="cbtn sec mini" onclick="event.stopPropagation();abrirFormTarifa(null,' + esc(JSON.stringify(pre)) + ')">+ Tarifa cliente</button>';
 }
 /** "Editar" abre el Valor general existente; "Fijar valor" abre uno nuevo con el promedio ya escrito. */
 function botonReferencial(f) {
-  if (f.genId) return '<button class="lnk" onclick="event.stopPropagation();abrirFormTarifa(\'' + esc(f.genId) + '\')">Editar</button>';
-  const pre = { proveedor_nombre: f.proveedor, residuo: f.residuo === "(sin residuo)" ? "" : f.residuo, unidad: f.unidad || "", estado_servicio: "Valor general", tipo_transaccion: f.tipo, fuente: "informal",
+  // ✎ editar: el valor fijado si existe; si no, abre uno nuevo con el promedio ya escrito
+  const pre = { proveedor_nombre: f.proveedor, residuo: f.residuo === "(sin residuo)" ? "" : f.residuo, unidad: f.unidad || "", estado_servicio: "Valor general", tipo_transaccion: f.tipo || "cobra", fuente: "informal",
     precio: f.ref != null ? Math.round(f.ref) : f.refUF != null ? Math.round(f.refUF * 100) / 100 : "", moneda: f.ref == null && f.refUF != null ? "UF" : "CLP" };
-  return '<button class="lnk" title="Crear un Valor general que reemplaza al promedio" onclick="event.stopPropagation();abrirFormTarifa(null,' + esc(JSON.stringify(pre)) + ')">Fijar valor</button>';
+  const editar = f.genId ? "abrirFormTarifa('" + esc(f.genId) + "')" : "abrirFormTarifa(null," + esc(JSON.stringify(pre)) + ")";
+  const btnEditar = '<button class="ico-btn" title="Editar tarifa referencial" aria-label="Editar tarifa referencial" onclick="event.stopPropagation();' + editar + '">✎</button>';
+  // − eliminar: solo un valor fijado a mano; el promedio sale de las tarifas de clientes
+  const btnEliminar = f.genId
+    ? '<button class="ico-btn danger" title="Eliminar tarifa referencial" aria-label="Eliminar tarifa referencial" onclick="event.stopPropagation();eliminarReferencial(\'' + esc(f.genId) + '\')">−</button>'
+    : '<button class="ico-btn" disabled title="' + (f.sinTarifas ? 'No hay tarifa que eliminar' : 'Es el promedio de las tarifas de clientes: para quitarlo, da de baja esas tarifas en el detalle') + '" aria-label="Eliminar (no disponible)">−</button>';
+  return btnEditar + btnEliminar;
 }
-function tarifasResumenProveedor(s) { return referencialHtml(tarifasDeProveedor(s)); }
+/** Quita un valor de referencia fijado a mano (lo da de baja: queda en el historial y se puede restaurar). */
+async function eliminarReferencial(id) {
+  const t = TARIFAS.find(x => x.id === id); if (!t) return;
+  const precio = t.precio_num == null ? "sin precio" : (t.moneda === "UF" ? fmtNum(t.precio_num) + " UF" : fmtCLP(t.precio_num)) + (t.unidad ? " / " + t.unidad : "");
+  if (!confirm("¿Estás seguro de eliminar la tarifa referencial de " + (t.residuo || "este residuo") + " (" + precio + ") de " + t.proveedor_nombre + "?\n\nLa tarifa referencial vuelve a calcularse con el promedio. Queda en el historial y se puede restaurar con \"Mostrar dadas de baja\".")) return;
+  try { const r = await api("tarifa_baja", { id }, true); await refrescarTrasGuardar([r.tarifa]); }
+  catch (e) { alert("No se pudo eliminar: " + e.message); }
+}
+/** Tarjeta de Proveedores: solo los residuos con valor (promedio o fijado); la tabla completa está en Tarifas. */
+function tarifasResumenProveedor(s) {
+  return referencialHtml(tarifasDeProveedor(s), { proveedor: s.name, soloConPrecio: true, titulo: "Tarifa referencial" });
+}
 
 /** Tarifa efectiva de cada sucursal, con su detalle del cobro y acciones. */
 function tarifasDetalleProveedor(s) {
   const ts = tarifasDeProveedor(s);
   marcarVigentes(TARIFAS.filter(t => t.activo));
-  const head = '<div class="meta" style="margin-top:10px;"><b>Tarifa por sucursal</b> <button class="lnk" onclick="abrirFormTarifa(null,{proveedor_nombre:' + esc(JSON.stringify(s.name)) + '})">+ Agregar tarifa</button></div>';
+  const head = '<div class="sec-tit" style="margin-top:12px"><span class="t-etq">Detalle de cobro por cliente y sucursal</span>' + botonNuevaTarifaCliente(s.name) + '</div>';
   if (!ts.length) return head + '<span class="toggle-hint">Sin tarifas registradas.</span>';
   const vig = ts.filter(t => t.vigente), ant = ts.length - vig.length;
   const orden = t => [esGeneral(t) ? "0" : "1", t.cliente, t.sucursal, t.residuo].map(v => String(v || "")).join("|");
