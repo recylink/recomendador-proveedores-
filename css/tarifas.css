@@ -175,3 +175,5 @@ tr.abierta .t-flecha { transform:rotate(90deg); }
 .ct-acciones .ct-clickup { margin-left:0; }
 .ct-editar { padding:5px 10px; background:#fff; color:var(--blue-d); border:1px solid var(--sky); border-radius:7px; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
 .ct-editar:hover { background:#eef6fb; }
+.sin-acc { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.sin-acc .cbtn { margin-top:0; }

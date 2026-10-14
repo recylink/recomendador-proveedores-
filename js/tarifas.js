@@ -521,17 +521,25 @@ function botonCrearFicha(nombre) {
 }
 const ACTORES = ["Gestor de residuos", "Transportista", "Destinatario Final", "Asesor", "N/A"];
 const CATEGORIAS = ["Transporte y disposición de residuos", "Tratamiento de residuos (almacenamiento, valorización y/o eliminación)", "Gestor REP", "Reciclador base", "Otros"];
-let FICHA_NOMBRE = "";
+let FICHA_NOMBRE = "", FICHA_EXTRA = {};
+// Regiones (tarifas / SINADER) -> etiqueta de "Área de acción" en ClickUp cuando el nombre no calza
+const REGION_A_AREA = { "Metropolitana": "RM", "Region Metropolitana": "RM", "Los Lagos": "Region de los Lagos", "Magallanes": "Punta Arenas", "Arica y Parinacota": "Arica", "Atacama": "Copiapó" };
+const areaDeRegion = r => REGION_A_AREA[r] || r;
 
-/** Formulario de contacto; al guardar crea la tarjeta BD y le liga las tarifas de ese proveedor. */
-function abrirFichaClickUp(nombre) {
-  FICHA_NOMBRE = nombre;
+/**
+ * Formulario de contacto; al guardar crea la tarjeta BD y le liga las tarifas de ese proveedor.
+ * extra (opcional, p. ej. desde DF SINADER): { rut, direccion, regiones, residuos, actor, categoria, nota, origen }
+ */
+function abrirFichaClickUp(nombre, extra) {
+  FICHA_NOMBRE = nombre; FICHA_EXTRA = extra || {};
   const ts = TARIFAS.filter(t => t.activo && !tget(t, "proveedor_id") && norm(t.proveedor_nombre) === norm(nombre));
-  const residuos = unicosOrdenados(ts.map(t => t.residuo)), regiones = unicosOrdenados(ts.map(t => t.region));
-  const dir = (ts.find(t => t.direccion) || {}).direccion || "";
+  const residuos = unicosOrdenados(ts.map(t => t.residuo).concat(FICHA_EXTRA.residuos || []));
+  const regiones = unicosOrdenados(ts.map(t => t.region).concat(FICHA_EXTRA.regiones || []));
+  const dir = FICHA_EXTRA.direccion || (ts.find(t => t.direccion) || {}).direccion || "";
+  const origen = FICHA_EXTRA.origen || (ts.length + ' tarifa(s) quedan ligadas a la ficha.');
   abrirModal("fichaModal",
     '<h3>Crear ficha en ClickUp</h3>' +
-    '<div class="muted small">Se crea en Control Ecosistema 2.0 con estado <b>BD</b>, Situación Atención y País Chile. Sus ' + ts.length + ' tarifa(s) quedan ligadas a la ficha.</div>' +
+    '<div class="muted small">Se crea en Control Ecosistema 2.0 con estado <b>BD</b>, Situación Atención y País Chile. ' + esc(origen) + '</div>' +
     '<div class="tf-grid">' +
       campo("c_nombre", "Nombre del proveedor *", inp("c_nombre", nombre), "span2") +
       campo("c_persona", "Persona de contacto", inp("c_persona", "")) +
@@ -539,12 +547,13 @@ function abrirFichaClickUp(nombre) {
       campo("c_correo", "Correo", inp("c_correo", "", 'type="email"')) +
       campo("c_telefono", "Teléfono", inp("c_telefono", "", 'placeholder="+56 9 ..."')) +
       campo("c_web", "Página web", inp("c_web", "")) +
-      campo("c_rut", "RUT de la empresa", inp("c_rut", "", 'placeholder="76.123.456-7"')) +
+      campo("c_rut", "RUT de la empresa", inp("c_rut", FICHA_EXTRA.rut || "", 'placeholder="76.123.456-7"')) +
       campo("c_direccion", "Dirección", inp("c_direccion", dir), "span2") +
-      campo("c_actor", "Actor", sel("c_actor", ACTORES, ACTORES[0])) +
-      campo("c_categoria", "Categoría de servicios", sel("c_categoria", CATEGORIAS, CATEGORIAS[0])) +
-      '<div class="tf-campo span2 small"><b>Residuos</b> (desde sus tarifas): ' + (esc(residuos.join(", ")) || '<span class="muted">-</span>') +
-        '<br><b>Área de acción</b>: ' + (esc(regiones.join(", ")) || '<span class="muted">-</span>') + '</div>' +
+      campo("c_actor", "Actor", sel("c_actor", ACTORES, FICHA_EXTRA.actor || ACTORES[0])) +
+      campo("c_categoria", "Categoría de servicios", sel("c_categoria", CATEGORIAS, FICHA_EXTRA.categoria || CATEGORIAS[0])) +
+      '<div class="tf-campo span2 small"><b>Residuos</b>' + (ts.length ? ' (desde sus tarifas)' : '') + ': ' + (esc(residuos.join(", ")) || '<span class="muted">- (se pueden agregar después con "Editar ficha")</span>') +
+        '<br><b>Área de acción</b>: ' + (esc(unicosOrdenados(regiones.map(areaDeRegion)).join(", ")) || '<span class="muted">-</span>') +
+        (FICHA_EXTRA.nota ? '<br><b>Descripción</b>: se agregan los establecimientos y tratamientos SINADER.' : '') + '</div>' +
     '</div>' +
     '<div class="tf-acc"><span id="c_status" class="muted small"></span><button class="cbtn" id="c_guardar" onclick="guardarFichaClickUp()">Crear ficha</button></div>');
 }
@@ -556,8 +565,9 @@ async function guardarFichaClickUp() {
   const datos = {
     nombre: g("c_nombre"), nombre_anterior: FICHA_NOMBRE, contacto_nombre: g("c_persona"), cargo: g("c_cargo"),
     correo: g("c_correo"), telefono: g("c_telefono"), web: g("c_web"), rut: g("c_rut"), direccion: g("c_direccion"),
-    actor: g("c_actor"), categoria: g("c_categoria"),
-    residuos: unicosOrdenados(ts.map(t => t.residuo)), regiones: unicosOrdenados(ts.map(t => t.region))
+    actor: g("c_actor"), categoria: g("c_categoria"), nota: FICHA_EXTRA.nota || "",
+    residuos: unicosOrdenados(ts.map(t => t.residuo).concat(FICHA_EXTRA.residuos || [])),
+    regiones: unicosOrdenados(ts.map(t => t.region).concat(FICHA_EXTRA.regiones || []).map(areaDeRegion))
   };
   if (!datos.nombre) { st.textContent = "Falta el nombre."; return; }
   if (datos.correo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.correo)) { st.textContent = "Revisa el correo."; return; }
@@ -573,6 +583,7 @@ async function guardarFichaClickUp() {
       await new Promise(res => setTimeout(res, 2500));
     }
     aplicarTarifasAProveedores(); refreshProvDL(); populateFilters(); render(); renderTarifas();
+    if (typeof renderSinader === "function") renderSinader(); // el gestor pasa a "En ecosistema"
     st.innerHTML = 'Listo. <a href="' + esc(r.url) + '" target="_blank" rel="noopener">Abrir en ClickUp ↗</a>';
     setTimeout(() => cerrarModal("fichaModal"), 2500);
   } catch (e) {

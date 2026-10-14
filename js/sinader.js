@@ -181,7 +181,8 @@ function renderSinader() {
           '<div class="badges">' + (g.en ? '<span class="badge b-sinader">En ecosistema</span> ' : '') +
             '<span class="badge b-sit">RUT ' + esc(g.rut || "sin RUT") + '</span> ' +
             '<span class="badge b-sit">' + n + (n < total ? ' de ' + total : '') + ' establecimiento' + (total > 1 ? 's' : '') + '</span></div></div>' +
-        '<button class="cbtn sec mini" onclick="copiarSinader(' + i + ', this)">Copiar datos</button>' +
+        '<div class="sin-acc">' + (g.en ? '' : '<button class="cbtn mini" onclick="crearFichaSinader(' + i + ')">+ Crear ficha en ClickUp</button>') +
+          '<button class="cbtn sec mini" onclick="copiarSinader(' + i + ', this)">Copiar datos</button></div>' +
       '</div>' +
       g.estabs.map(estabHtml).join('') +
     '</div>';
@@ -228,6 +229,25 @@ function copiarSinader(i, btn) {
   const ok = () => { const t = btn.textContent; btn.textContent = "Copiado ✓"; setTimeout(() => { btn.textContent = t; }, 1500); };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(texto).then(ok, () => window.prompt("Copia los datos:", texto));
   else window.prompt("Copia los datos:", texto);
+}
+
+/** Ficha BD en ClickUp para un gestor SINADER fuera del ecosistema (todos sus establecimientos, no solo los filtrados). */
+function crearFichaSinader(i) {
+  const g = SIN_GRUPOS[i]; if (!g) return;
+  const estabs = (g.estabs[0].e.rk && SINADER_POR_RUT[g.estabs[0].e.rk]) || g.estabs.map(x => x.e);
+  const lineas = ["Gestor autorizado SINADER (destinatario RETC, descarga 8-10-26):"];
+  estabs.forEach(e => {
+    const act = e.trat.filter(t => t.activo).map(tratTexto);
+    lineas.push("- " + (e.nombre || e.razon) + " · " + [e.comuna, e.region].filter(Boolean).join(", ") + " · RETC " + e.codigo +
+      (act.length ? "\n  Tratamientos: " + act.join("; ") : "\n  Sin tratamientos activos"));
+  });
+  const e0 = estabs[0];
+  abrirFichaClickUp(g.razon, {
+    rut: g.rut, direccion: [e0.comuna, e0.region].filter(Boolean).join(", "),
+    regiones: unicos(estabs.map(e => e.region)), actor: "Destinatario Final",
+    categoria: "Tratamiento de residuos (almacenamiento, valorización y/o eliminación)",
+    nota: lineas.join("\n"), origen: "Desde DF SINADER: " + estabs.length + " establecimiento(s); se agregan a la descripción de la tarjeta."
+  });
 }
 
 function sinaderInit() {
