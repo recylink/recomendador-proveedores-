@@ -538,7 +538,8 @@ function botonCrearFicha(nombre) {
   return '<button class="ct-clickup mini ct-nueva" onclick="event.stopPropagation();abrirFichaClickUp(' + esc(JSON.stringify(nombre || "")) + ')">+ Crear ficha en ClickUp</button>';
 }
 const ACTORES = ["Gestor de residuos", "Transportista", "Destinatario Final", "Asesor", "N/A"];
-const CATEGORIAS = ["Transporte y disposición de residuos", "Tratamiento de residuos (almacenamiento, valorización y/o eliminación)", "Gestor REP", "Reciclador base", "Otros"];
+// Opciones de "Categoría de servicios" en Control Ecosistema 2.0 (selección múltiple)
+const CATEGORIAS = ["Transporte y disposición de residuos", "Tratamiento de residuos (almacenamiento, valorización y/o eliminación)", "Charlas, talleres o asesoría en temáticas de economía circular o similar", "Diseño y/o instalación de puntos de segregación (puntos limpio, puntos verdes, composteras y otros)", "Comercialización de productos circulares", "Arriendo o venta de bodega (RESPEL-SUSPEL)", "Diseño e Ingeniería en manejo de residuos", "Arriendo o venta de maquinaria para el manejo de residuos", "Gestor REP", "Reciclador base", "Sistema de Gestión", "Laboratorio para análisis de RILES y RESPEL", "Venta de equipos e insumos para el manejo de residuos (pesas, maxisacos, Ph metro, termómetros, etc,)", "Otros"];
 let FICHA_NOMBRE = "", FICHA_EXTRA = {};
 // Regiones (tarifas / SINADER) -> etiqueta de "Área de acción" en ClickUp cuando el nombre no calza
 const REGION_A_AREA = { "Metropolitana": "RM", "Region Metropolitana": "RM", "Los Lagos": "Region de los Lagos", "Magallanes": "Punta Arenas", "Arica y Parinacota": "Arica", "Atacama": "Copiapó" };
@@ -568,12 +569,12 @@ function abrirFichaClickUp(nombre, extra) {
       campo("c_rut", "RUT de la empresa", inp("c_rut", FICHA_EXTRA.rut || "", 'placeholder="76.123.456-7"')) +
       campo("c_direccion", "Dirección", inp("c_direccion", dir), "span2") +
       campo("c_actor", "Actor", sel("c_actor", ACTORES, FICHA_EXTRA.actor || ACTORES[0])) +
-      campo("c_categoria", "Categoría de servicios", sel("c_categoria", CATEGORIAS, FICHA_EXTRA.categoria || CATEGORIAS[0])) +
+      campo("c_categorias", "Categoría de servicios <span class=\"muted\">· una o varias</span>", mselHtml("c_categorias", { opciones: CATEGORIAS, valores: [].concat(FICHA_EXTRA.categorias || FICHA_EXTRA.categoria || CATEGORIAS[0]), placeholder: "+ agregar categoría" }), "span2") +
       '<div class="tf-campo span2 small"><b>Residuos</b>' + (ts.length ? ' (desde sus tarifas)' : '') + ': ' + (esc(residuos.join(", ")) || '<span class="muted">- (se pueden agregar después con "Editar ficha")</span>') +
         '<br><b>Área de acción</b>: ' + (esc(unicosOrdenados(regiones.map(areaDeRegion)).join(", ")) || '<span class="muted">-</span>') +
         (FICHA_EXTRA.nota ? '<br><b>Descripción</b>: se agregan los establecimientos y tratamientos SINADER.' : '') + '</div>' +
     '</div>' +
-    '<div class="tf-acc"><span id="c_status" class="muted small"></span><button class="cbtn" id="c_guardar" onclick="guardarFichaClickUp()">Crear ficha</button></div>');
+    '<div class="tf-acc"><span id="c_status" class="muted small"></span><button class="cbtn" id="c_guardar" onclick="guardarFichaClickUp()">' + esc(FICHA_EXTRA.textoBoton || "Crear ficha") + '</button></div>');
 }
 
 async function guardarFichaClickUp() {
@@ -583,7 +584,7 @@ async function guardarFichaClickUp() {
   const datos = {
     nombre: g("c_nombre"), nombre_anterior: FICHA_NOMBRE, contacto_nombre: g("c_persona"), cargo: g("c_cargo"),
     correo: g("c_correo"), telefono: g("c_telefono"), web: g("c_web"), rut: g("c_rut"), direccion: g("c_direccion"),
-    actor: g("c_actor"), categoria: g("c_categoria"), nota: FICHA_EXTRA.nota || "",
+    actor: g("c_actor"), categorias: mselValores("c_categorias"), nota: FICHA_EXTRA.nota || "",
     residuos: unicosOrdenados(ts.map(t => t.residuo).concat(FICHA_EXTRA.residuos || [])),
     regiones: unicosOrdenados(ts.map(t => t.region).concat(FICHA_EXTRA.regiones || []).map(areaDeRegion))
   };
@@ -602,6 +603,13 @@ async function guardarFichaClickUp() {
     }
     aplicarTarifasAProveedores(); refreshProvDL(); populateFilters(); render(); renderTarifas();
     if (typeof renderSinader === "function") renderSinader(); // el gestor pasa a "En ecosistema"
+    if (typeof FICHA_EXTRA.onCreada === "function") { // p. ej. guardar las tarifas de "Nueva tarifa" ya ligadas a la ficha
+      st.textContent = "Ficha creada. Guardando las tarifas…";
+      await FICHA_EXTRA.onCreada(r);
+      st.innerHTML = 'Listo: ficha creada y tarifas guardadas. <a href="' + esc(r.url) + '" target="_blank" rel="noopener">Abrir en ClickUp ↗</a>';
+      setTimeout(() => cerrarModal("fichaModal"), 1500);
+      return;
+    }
     st.innerHTML = 'Listo. <a href="' + esc(r.url) + '" target="_blank" rel="noopener">Abrir en ClickUp ↗</a>';
     setTimeout(() => cerrarModal("fichaModal"), 2500);
   } catch (e) {
@@ -1049,8 +1057,8 @@ function abrirModal(id, html, onClose) {
   if (!m) {
     m = document.createElement("div"); m.id = id; m.className = "modal tmodal";
     m.addEventListener("click", e => { if (e.target === m) cerrarModal(id); });
-    document.body.appendChild(m);
   }
+  document.body.appendChild(m); // si ya existía, pasa al final y queda encima de los demás
   m.innerHTML = '<div class="modalinner"><button class="tm-x" onclick="cerrarModal(\'' + id + '\')" aria-label="Cerrar">✕</button>' + html + '</div>';
   m.style.display = "block";
   _onCloseModal[id] = onClose || null;

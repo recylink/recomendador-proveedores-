@@ -20,8 +20,8 @@ const ntSel = (cls, opts, val) => '<select class="' + cls + '">' + opts.map(([v,
  */
 function abrirNuevaTarifa(pre) {
   pre = pre || {};
-  NT = { ref: {}, cli: {}, cliTocado: {}, cond: {}, adj: {}, sucQuita: {}, sucAgrega: {} }; // adj: { REF | sk: [{ file, res: [claves de residuo] }] }
-  Object.keys(pre.ref || {}).forEach(r => { NT.ref[ntK(r)] = Object.assign({ moneda: "CLP" }, pre.ref[r]); });
+  NT = { ref: {}, cli: {}, cliTocado: {}, nRef: {}, nCli: {}, cond: {}, adj: {}, sucQuita: {}, sucAgrega: {} }; // ref[k#i], cli[sk|k#i]: líneas de cobro por residuo // adj: { REF | sk: [{ file, res: [claves de residuo] }] }
+  Object.keys(pre.ref || {}).forEach(r => { NT.ref[ntK(r) + "#0"] = Object.assign({ moneda: "CLP", tipo: "cobra" }, pre.ref[r]); });
   const estadosCli = (CATS.estado_servicio || []).filter(e => norm(e) !== "VALORGENERAL");
   const hoy = new Date().toISOString().slice(0, 10);
   abrirModal("nuevaTarifaModal",
@@ -39,10 +39,9 @@ function abrirNuevaTarifa(pre) {
       mselHtml("n_res", { opciones: CATS.residuo || [], valores: (pre.residuos || []).filter(Boolean), otro: true, placeholder: "+ residuo", onChange: ntRender }) + '</div>' +
 
     '<div class="nt-paso"><div class="nt-tit"><span class="nt-num">3</span> Tarifa referencial por residuo</div>' +
-      '<div class="muted small">Precio de lista del proveedor, sin cliente. Deja el monto vacío en los residuos que no quieras fijar.</div>' +
+      '<div class="muted small">Precio de lista del proveedor, sin cliente. Cada residuo puede tener varios cobros (<b>+ otro cobro</b>): p. ej. el proveedor <b>paga</b> por kg y <b>cobra</b> el transporte por viaje (anota el motivo en el detalle del cobro). Deja el monto vacío en lo que no quieras fijar.</div>' +
       '<div id="n_ref"></div>' +
       '<details class="nt-cond"><summary>Condiciones (aplican a la referencial y son la base de cada sucursal)</summary><div class="tf-grid">' +
-        campo("n_tipo", "Tipo de transacción", sel("n_tipo", [["cobra", "Cobra: el cliente paga al proveedor"], ["paga", "Paga: el proveedor paga al cliente"]], "cobra")) +
         campo("n_conts", "Contenedor(es) / vehículo(s)", mselHtml("n_conts", { opciones: CATS.contenedor || [], valores: [], otro: true, placeholder: "+ contenedor" })) +
         campo("n_transp", "¿Incluye transporte?", sel("n_transp", ntSN, "si")) +
         campo("n_disp", "¿Incluye disposición?", sel("n_disp", ntSN, "si")) +
@@ -74,11 +73,31 @@ function ntProvCambio() {
   const nombre = ntVal("n_prov");
   const s = nombre ? buscarProveedorClickUp(nombre) : null;
   if (!nombre) { box.innerHTML = ""; return; }
-  if (!s) { box.innerHTML = '<span class="warn">No está en ClickUp: se guardará solo con el nombre (luego puedes crear su ficha).</span>'; return; }
+  const existentes = ntTarifasExistentesHtml(nombre, s);
+  if (!s) { box.innerHTML = '<span class="warn">No está en ClickUp: al guardar se te pedirá crear su ficha.</span>' + existentes; return; }
   const cu = (s.residuosCU || []).filter(Boolean);
   box.innerHTML = '<span class="ok-msg">✓ ' + esc(s.name) + '</span>' +
     (cu.length ? ' · residuos en ClickUp: ' + esc(cu.slice(0, 8).join(", ")) + (cu.length > 8 ? '…' : '') +
-      ' <button class="lnk" type="button" onclick="ntUsarResiduosCU()">Usar estos residuos</button>' : ' · sin residuos cargados en ClickUp');
+      ' <button class="lnk" type="button" onclick="ntUsarResiduosCU()">Usar estos residuos</button>' : ' · sin residuos cargados en ClickUp') + existentes;
+}
+/** Tarifas activas que el proveedor ya tiene: referencial por residuo y lo cobrado a cada cliente/sucursal. */
+function ntTarifasExistentesHtml(nombre, s) {
+  const ts = s ? tarifasDeProveedor(s) : TARIFAS.filter(t => t.activo && norm(t.proveedor_nombre) === norm(nombre));
+  if (!ts.length) return '<div class="muted small nt-exist-vacio">Este proveedor aún no tiene tarifas registradas.</div>';
+  const vig = ts.filter(t => t.vigente);
+  const refs = referenciales(ts).filter(f => f.conPrecio);
+  const orden = t => [esGeneral(t) ? "0" : "1", t.residuo, t.cliente, t.sucursal].map(v => String(v || "")).join("|");
+  const filas = vig.slice().sort((a, b) => orden(a).localeCompare(orden(b), "es"));
+  const max = 40;
+  return '<details class="nt-exist" open><summary>Tarifas ya registradas de este proveedor: <b>' + vig.length + '</b> vigente(s)' +
+      (refs.length ? ' · referencial: ' + esc(refs.slice(0, 4).map(f => f.residuo + " " + (f.ref != null ? fmtCLP(f.ref) : fmtNum(f.refUF, 2) + " UF") + (f.unidad ? "/" + f.unidad : "")).join(" · ")) + (refs.length > 4 ? " …" : "") : '') + '</summary>' +
+    '<div class="tscroll"><table class="ttar nt-exist-tab"><tr><th>Residuo</th><th>Tipo</th><th>Precio</th><th>Empresa / sucursal</th><th>Fecha</th></tr>' +
+    filas.slice(0, max).map(t => '<tr><td>' + esc(t.residuo || "-") + '</td><td>' + (t.tipo === "paga" ? '<span class="pill p-paga">paga</span>' : 'cobra') + '</td>' +
+      '<td class="num">' + precioHtml(t) + '</td>' +
+      '<td>' + (esGeneral(t) ? '<span class="pill es-valorgeneral">Valor general</span>' : esc([t.cliente, t.sucursal].filter(Boolean).join(" · ") || "-")) + '</td>' +
+      '<td class="small">' + esc(t.fecha || "-") + '</td></tr>').join('') +
+    '</table></div>' + (filas.length > max ? '<div class="muted small">Se muestran ' + max + ' de ' + filas.length + '. Revisa el resto en la pestaña Tarifas.</div>' : '') +
+  '</details>';
 }
 function ntUsarResiduosCU() {
   const s = buscarProveedorClickUp(ntVal("n_prov")); if (!s) return;
@@ -96,12 +115,10 @@ function ntComunes() {
 /** Guarda lo escrito (tablas y condiciones por sucursal) antes de redibujar. */
 function ntCapturar() {
   if (!NT) return;
-  document.querySelectorAll("#n_ref tr[data-k]").forEach(tr => {
-    NT.ref[tr.dataset.k] = { monto: tr.querySelector(".nt-monto").value.trim(), moneda: tr.querySelector(".nt-moneda").value, unidad: tr.querySelector(".nt-unidad").value.trim() };
-  });
-  document.querySelectorAll("#n_cli tr[data-k]").forEach(tr => {
-    NT.cli[tr.dataset.k] = { monto: tr.querySelector(".nt-monto").value.trim(), moneda: tr.querySelector(".nt-moneda").value, unidad: tr.querySelector(".nt-unidad").value.trim() };
-  });
+  const leer = tr => ({ tipo: tr.querySelector(".nt-tipo").value,
+    monto: tr.querySelector(".nt-monto").value.trim(), moneda: tr.querySelector(".nt-moneda").value, unidad: tr.querySelector(".nt-unidad").value.trim() });
+  document.querySelectorAll("#n_ref tr[data-k]").forEach(tr => { NT.ref[tr.dataset.k] = leer(tr); });
+  document.querySelectorAll("#n_cli tr[data-k]").forEach(tr => { NT.cli[tr.dataset.k] = leer(tr); });
   document.querySelectorAll("#n_cli .nt-suc[data-sk]").forEach(b => {
     const q = c => b.querySelector(c);
     NT.cond[b.dataset.sk] = {
@@ -111,13 +128,23 @@ function ntCapturar() {
     };
   });
 }
-function ntFila(r, v, cual, key, ayuda) {
-  return '<tr data-k="' + esc(key) + '"><td><b>' + esc(r) + '</b>' + (ayuda ? '<div class="muted small">' + ayuda + '</div>' : '') + '</td>' +
-    '<td><input class="nt-monto" inputmode="decimal" placeholder="Monto" value="' + esc(v.monto || "") + '" oninput="ntEditado(\'' + cual + '\',\'' + esc(key) + '\')"></td>' +
-    '<td><select class="nt-moneda" onchange="ntEditado(\'' + cual + '\',\'' + esc(key) + '\')">' + (CATS.moneda || ["CLP", "UF"]).map(m => '<option' + (m === (v.moneda || "CLP") ? ' selected' : '') + '>' + esc(m) + '</option>').join('') + '</select></td>' +
-    '<td><input class="nt-unidad" list="ntUnidadDL" placeholder="Unidad" value="' + esc(v.unidad || "") + '" oninput="ntEditado(\'' + cual + '\',\'' + esc(key) + '\')"></td></tr>';
+/** Cantidad de líneas de cobro: referencial por residuo; en cada sucursal sigue a la referencial salvo que se cambie ahí. */
+const ntNRef = k => NT.nRef[k] || 1;
+const ntNCli = (base, k) => NT.nCli[base] != null ? NT.nCli[base] : ntNRef(k);
+const ntCab = '<tr><th>Residuo</th><th>Tipo</th><th>Monto</th><th>Moneda</th><th>Unidad</th><th></th></tr>';
+/** Una línea de cobro. base = k (referencial) o sk|k (sucursal); key = base#i. */
+function ntFila(r, i, v, cual, base, ayuda) {
+  const key = base + "#" + i, ed = "ntEditado('" + cual + "','" + esc(key) + "')";
+  return '<tr data-k="' + esc(key) + '"' + (i ? ' class="nt-linea"' : '') + '><td>' +
+      (i ? '<span class="muted small">↳ otro cobro</span>' : '<b>' + esc(r) + '</b>' + (ayuda ? '<div class="muted small">' + ayuda + '</div>' : '') +
+        '<div><button type="button" class="lnk small" onclick="ntAgregarLinea(\'' + cual + '\',\'' + esc(base) + '\')">+ otro cobro</button></div>') + '</td>' +
+    '<td><select class="nt-tipo" onchange="' + ed + '"><option value="cobra"' + (v.tipo !== "paga" ? ' selected' : '') + '>Cobra</option><option value="paga"' + (v.tipo === "paga" ? ' selected' : '') + '>Paga</option></select></td>' +
+    '<td><input class="nt-monto" inputmode="decimal" placeholder="Monto" value="' + esc(v.monto || "") + '" oninput="' + ed + '"></td>' +
+    '<td><select class="nt-moneda" onchange="' + ed + '">' + (CATS.moneda || ["CLP", "UF"]).map(m => '<option' + (m === (v.moneda || "CLP") ? ' selected' : '') + '>' + esc(m) + '</option>').join('') + '</select></td>' +
+    '<td><input class="nt-unidad" list="ntUnidadDL" placeholder="Unidad" value="' + esc(v.unidad || "") + '" oninput="' + ed + '"></td>' +
+    '<td>' + (i ? '<button type="button" class="ico-btn danger" title="Quitar este cobro" onclick="ntQuitarLinea(\'' + cual + '\',\'' + esc(base) + '\',' + i + ')">−</button>' : '') + '</td></tr>';
 }
-/** Lo escrito en el referencial se copia a cada sucursal mientras esa celda no se haya tocado. */
+/** Lo escrito en la referencial se copia a cada sucursal mientras esa línea no se haya tocado. */
 function ntEditado(cual, key) {
   ntCapturar();
   if (cual === "cli") NT.cliTocado[key] = true;
@@ -125,13 +152,34 @@ function ntEditado(cual, key) {
     document.querySelectorAll('#n_cli tr[data-k$="|' + CSS.escape(key) + '"]').forEach(tr => {
       if (NT.cliTocado[tr.dataset.k]) return;
       const v = NT.ref[key] || {};
+      tr.querySelector(".nt-tipo").value = v.tipo || "cobra";
       tr.querySelector(".nt-monto").value = v.monto || ""; tr.querySelector(".nt-moneda").value = v.moneda || "CLP"; tr.querySelector(".nt-unidad").value = v.unidad || "";
       NT.cli[tr.dataset.k] = Object.assign({}, v);
     });
   }
   ntResumen();
 }
-/** Copia condiciones y precios de la primera sucursal a otra. */
+function ntAgregarLinea(cual, base) {
+  ntCapturar();
+  if (cual === "ref") NT.nRef[base] = ntNRef(base) + 1;
+  else { const k = base.split("|")[1]; NT.nCli[base] = ntNCli(base, k) + 1; }
+  ntRender();
+}
+/** Quita la línea i y corre las siguientes un lugar. */
+function ntQuitarLinea(cual, base, i) {
+  ntCapturar();
+  const datos = cual === "ref" ? NT.ref : NT.cli;
+  const k = cual === "ref" ? base : base.split("|")[1];
+  const n = cual === "ref" ? ntNRef(base) : ntNCli(base, k);
+  for (let j = i; j < n - 1; j++) {
+    datos[base + "#" + j] = datos[base + "#" + (j + 1)];
+    if (cual === "cli") NT.cliTocado[base + "#" + j] = NT.cliTocado[base + "#" + (j + 1)];
+  }
+  delete datos[base + "#" + (n - 1)]; delete NT.cliTocado[base + "#" + (n - 1)];
+  if (cual === "ref") NT.nRef[base] = n - 1; else NT.nCli[base] = n - 1;
+  ntRender();
+}
+/** Copia condiciones, residuos y cobros de la primera sucursal a otra. */
 function ntCopiarPrimera(sk) {
   ntCapturar();
   const sucs = mselValores("n_sucs"); if (!sucs.length) return;
@@ -141,8 +189,12 @@ function ntCopiarPrimera(sk) {
   NT.sucQuita[sk] = (NT.sucQuita[sk0] || []).slice();
   NT.sucAgrega[sk] = (NT.sucAgrega[sk0] || []).slice();
   ntResSuc(sk0).forEach(r => {
-    const k = ntK(r), a = sk0 + "|" + k, b = sk + "|" + k;
-    NT.cli[b] = Object.assign({}, NT.cliTocado[a] ? NT.cli[a] : (NT.ref[k] || {})); NT.cliTocado[b] = true;
+    const k = ntK(r), a0 = sk0 + "|" + k, b0 = sk + "|" + k, n = ntNCli(a0, k);
+    NT.nCli[b0] = n;
+    for (let i = 0; i < n; i++) {
+      const a = a0 + "#" + i, b = b0 + "#" + i;
+      NT.cli[b] = Object.assign({}, NT.cliTocado[a] ? NT.cli[a] : (NT.ref[k + "#" + i] || NT.cli[a] || {})); NT.cliTocado[b] = true;
+    }
   });
   ntRender();
 }
@@ -155,12 +207,15 @@ function ntRender() {
   const s = prov ? buscarProveedorClickUp(prov) : null;
   const actuales = {};
   if (s) referenciales(tarifasDeProveedor(s)).forEach(f => { if (f.conPrecio) actuales[ntK(f.residuo)] = f; });
-  const cab = '<tr><th>Residuo</th><th>Monto</th><th>Moneda</th><th>Unidad</th></tr>';
+  const cab = ntCab;
   const vacio = '<div class="muted small nt-vacio">Elige al menos un residuo en el paso 2.</div>';
   document.getElementById("n_ref").innerHTML = residuos.length ? '<div class="tscroll"><table class="ttar nt-tab">' + cab + residuos.map(r => {
-    const a = actuales[ntK(r)];
-    const v = NT.ref[ntK(r)] || { unidad: a ? a.unidad || "" : "" };
-    return ntFila(r, v, "ref", ntK(r), a ? 'actual: ' + esc((a.ref != null ? fmtCLP(a.ref) : fmtNum(a.refUF, 2) + " UF") + (a.unidad ? " / " + a.unidad : "") + " · " + a.nota) : "");
+    const k = ntK(r), a = actuales[k], filas = [];
+    for (let i = 0; i < ntNRef(k); i++) {
+      const v = NT.ref[k + "#" + i] || (i === 0 && a ? { unidad: a.unidad || "", tipo: a.paga ? "paga" : "cobra" } : { tipo: "cobra" });
+      filas.push(ntFila(r, i, v, "ref", k, i === 0 && a ? 'actual: ' + esc((a.ref != null ? fmtCLP(a.ref) : fmtNum(a.refUF, 2) + " UF") + (a.unidad ? " / " + a.unidad : "") + " · " + a.nota) : ""));
+    }
+    return filas.join('');
   }).join('') + '</table></div>' : vacio;
 
   // 4 · un bloque por sucursal (o uno "sin sucursal" si no se eligió ninguna)
@@ -189,8 +244,12 @@ function ntRender() {
       ntSucResHtml(sk, resSuc) +
       '<div class="nt-adj-box"><div class="nt-adj-tit">PDF respaldo de esta sucursal</div>' + ntAdjHtml(sk, resSuc) + '</div>' +
       (resSuc.length ? '<div class="tscroll"><table class="ttar nt-tab">' + cab + resSuc.map(r => {
-        const key = sk + "|" + ntK(r);
-        return ntFila(r, NT.cliTocado[key] ? NT.cli[key] : (NT.ref[ntK(r)] || NT.cli[key] || {}), "cli", key, "");
+        const k = ntK(r), base = sk + "|" + k, filas = [];
+        for (let i = 0; i < ntNCli(base, k); i++) {
+          const key = base + "#" + i;
+          filas.push(ntFila(r, i, NT.cliTocado[key] ? NT.cli[key] : (NT.ref[k + "#" + i] || NT.cli[key] || { tipo: "cobra" }), "cli", base, ""));
+        }
+        return filas.join('');
       }).join('') + '</table></div>' : vacio) +
     '</div>';
   });
@@ -292,18 +351,19 @@ function ntArmar() {
   const com = ntComunes();
   const base = {
     proveedor_id: sup ? sup.id : "", proveedor_nombre: sup ? sup.name : nombre,
-    tipo_transaccion: ntVal("n_tipo") || "cobra", fuente: "", cantidad_min: "", cantidad_max: "", pdf_url: ""
+    fuente: "", cantidad_min: "", cantidad_max: "", pdf_url: ""
   };
   const conts = mselValores("n_conts"); const cs = conts.length ? conts : [""];
   const lista = [], nuevasSucursales = [];
   // 3 · referenciales: una por residuo con monto (× contenedor), con las condiciones comunes
-  residuos.forEach(r => {
-    const v = NT.ref[ntK(r)] || {}; const monto = num(v.monto || "", r + " (referencial)");
-    if (monto === "") return;
+  residuos.forEach(r => { const k = ntK(r); for (let i = 0; i < ntNRef(k); i++) {
+    const v = NT.ref[k + "#" + i] || {}; const monto = num(v.monto || "", r + " (referencial)");
+    if (monto === "") continue;
     cs.forEach(co => lista.push(Object.assign({}, base, { residuo: r, contenedor: co, precio: monto, moneda: v.moneda || "CLP", unidad: v.unidad || "",
+      tipo_transaccion: v.tipo === "paga" ? "paga" : "cobra",
       incluye_transporte: com.transp, incluye_disposicion: com.disp, fecha: com.fecha, detalle: com.detalle, _pdf: ntAdjPara("REF", ntK(r)),
       estado_servicio: "Valor general", cliente: "", estado_cliente: "", sucursal: "", direccion: "", comuna: "", region: "" })));
-  });
+  } });
   const nRef = lista.length;
   // 4 · por cliente: un bloque por sucursal, con sus condiciones y sus precios
   const det = document.getElementById("n_cli_det");
@@ -318,16 +378,17 @@ function ntArmar() {
       const lugar = d && (d.direccion || d.comuna) ? { direccion: d.direccion, comuna: d.comuna, region: d.region }
                                                   : (cm => ({ direccion: c.dir || "", comuna: cm, region: regionDeComuna(cm) }))(c.comuna ? comunaCanonica(c.comuna) : "");
       if (su && (!d || !d.enLista)) nuevasSucursales.push(Object.assign({ empresa: emp, sucursal: su }, lugar));
-      ntResSuc(sk).forEach(r => {
-        const key = sk + "|" + ntK(r);
-        const v = NT.cliTocado[key] ? (NT.cli[key] || {}) : (NT.ref[ntK(r)] || NT.cli[key] || {});
+      ntResSuc(sk).forEach(r => { const k = ntK(r), b = sk + "|" + k; for (let i = 0; i < ntNCli(b, k); i++) {
+        const key = b + "#" + i;
+        const v = NT.cliTocado[key] ? (NT.cli[key] || {}) : (NT.ref[k + "#" + i] || NT.cli[key] || {});
         const monto = num(v.monto || "", r + (su ? " en " + su : " (cliente)"));
-        if (monto === "") { sinMonto++; return; }
+        if (monto === "") { sinMonto++; continue; }
         lista.push(Object.assign({}, base, lugar, { residuo: r, contenedor: c.cont || "", precio: monto, moneda: v.moneda || "CLP", unidad: v.unidad || "",
+          tipo_transaccion: v.tipo === "paga" ? "paga" : "cobra",
           incluye_transporte: c.transp || "si", incluye_disposicion: c.disp || "si", detalle: c.detalle || "",
           fecha: porSuc ? (c.fecha || com.fecha) : com.fecha, _pdf: ntAdjPara(sk, ntK(r)),
           sucursal: su, estado_servicio: estado, cliente: emp, estado_cliente: estCli }));
-      });
+      } });
     });
   }
   return { lista, nRef, nCli: lista.length - nRef, sinMonto, enClickUp: !!sup, nuevasSucursales };
@@ -336,7 +397,7 @@ function ntResumen() {
   const st = document.getElementById("n_status"); if (!st || !NT) return;
   try {
     const a = ntArmar();
-    st.textContent = a.lista.length ? "Se crearán " + a.lista.length + " tarifa(s): " + a.nRef + " referencial(es)" + (a.nCli ? " + " + a.nCli + " por cliente" : "") + "." + (a.sinMonto ? " " + a.sinMonto + " residuo(s) sin monto en sucursales se omiten." : "") +
+    st.textContent = a.lista.length ? "Se crearán " + a.lista.length + " tarifa(s): " + a.nRef + " referencial(es)" + (a.nCli ? " + " + a.nCli + " por cliente" : "") + "." + (a.sinMonto ? " " + a.sinMonto + " cobro(s) sin monto en sucursales se omiten." : "") +
       (a.lista.length ? " " + a.lista.filter(d => d._pdf).length + " con PDF respaldo." : "") : "Ingresa al menos un monto.";
   } catch (e) { st.textContent = /Falta el proveedor|al menos un residuo/.test(e.message) ? "Completa el proveedor y elige sus residuos." : e.message; }
 }
@@ -352,23 +413,48 @@ async function ntGuardar() {
     const a = ntArmar();
     if (!a.lista.length) throw new Error("Ingresa al menos un monto (referencial o por sucursal).");
     if (a.lista.length > 200) throw new Error("Son " + a.lista.length + " tarifas; el máximo por carga es 200. Divide la carga.");
-    if (!a.enClickUp && !confirm("“" + a.lista[0].proveedor_nombre + "” no está en ClickUp. ¿Guardar igual solo con el nombre?")) return;
-    if (a.lista.length > 1 && !confirm("Se crearán " + a.lista.length + " tarifas (" + a.nRef + " referenciales" + (a.nCli ? " y " + a.nCli + " por cliente" : "") + "). ¿Continuar?")) return;
-    btn.disabled = true; st.textContent = "Guardando…";
+    if (a.lista.length > 1 && !confirm("Se crearán " + a.lista.length + " tarifas (" + a.nRef + " referenciales" + (a.nCli ? " y " + a.nCli + " por cliente" : "") + ")" + (a.enClickUp ? "" : " y antes se creará la ficha del proveedor en ClickUp") + ". ¿Continuar?")) return;
     if (!sesionActiva()) await iniciarSesion();
-    for (const d of a.lista) await asegurarCatalogos(d); // valores nuevos (residuo, unidad, contenedor…) pasan al catálogo y a los filtros
-    // PDF de respaldo: uno común y, si se eligió, uno por sucursal
-    const urls = {};
-    for (const ref of [...new Set(a.lista.map(d => d._pdf).filter(Boolean))]) {
-      const [sk, i] = ref.split(":"); urls[ref] = await ntSubirPdf(NT.adj[sk][+i].file);
-    }
-    a.lista.forEach(d => { d.pdf_url = urls[d._pdf] || ""; delete d._pdf; });
-    const r = await api("tarifa_crear_lote", { tarifas: a.lista }, true);
-    await refrescarTrasGuardar(r.tarifas);
-    await registrarSucursales(a.nuevasSucursales);
-    st.textContent = r.ids.length + " tarifa(s) guardada(s).";
-    setTimeout(() => cerrarModal("nuevaTarifaModal"), 600);
+    if (!a.enClickUp) { ntPedirFicha(a); return; } // paso siguiente obligatorio: la ficha en ClickUp
+    btn.disabled = true;
+    await ntGuardarLista(a);
   } catch (e) {
     st.textContent = "Error: " + e.message;
   } finally { if (btn) btn.disabled = false; }
+}
+
+/** Sube los PDF y guarda las tarifas armadas. */
+async function ntGuardarLista(a) {
+  const st = document.getElementById("n_status");
+  if (st) st.textContent = "Guardando…";
+  for (const d of a.lista) await asegurarCatalogos(d); // valores nuevos (residuo, unidad, contenedor…) pasan al catálogo y a los filtros
+  const urls = {};
+  for (const ref of [...new Set(a.lista.map(d => d._pdf).filter(Boolean))]) {
+    const [sk, i] = ref.split(":"); urls[ref] = await ntSubirPdf(NT.adj[sk][+i].file);
+  }
+  a.lista.forEach(d => { d.pdf_url = urls[d._pdf] || ""; delete d._pdf; });
+  const r = await api("tarifa_crear_lote", { tarifas: a.lista }, true);
+  await refrescarTrasGuardar(r.tarifas);
+  await registrarSucursales(a.nuevasSucursales);
+  if (st) st.textContent = r.ids.length + " tarifa(s) guardada(s).";
+  setTimeout(() => cerrarModal("nuevaTarifaModal"), 600);
+  return r;
+}
+
+/** El proveedor no está en ClickUp: se abre "Crear ficha" con lo cargado; al crearla se guardan las tarifas ligadas a ella. */
+function ntPedirFicha(a) {
+  const st = document.getElementById("n_status");
+  const nombre = a.lista[0].proveedor_nombre;
+  const residuos = unicosOrdenados(a.lista.map(d => d.residuo));
+  const regiones = unicosOrdenados(a.lista.map(d => d.region).filter(Boolean));
+  if (st) st.textContent = "Falta crear la ficha de " + nombre + " en ClickUp para guardar.";
+  abrirFichaClickUp(nombre, {
+    residuos, regiones,
+    origen: "Paso siguiente: " + nombre + " no está en ClickUp. Crea su ficha para guardar las " + a.lista.length + " tarifa(s); quedarán ligadas a ella.",
+    textoBoton: "Crear ficha y guardar tarifas",
+    onCreada: async (r) => {
+      a.lista.forEach(d => { d.proveedor_id = r.id; d.proveedor_nombre = r.nombre || nombre; });
+      await ntGuardarLista(a);
+    }
+  });
 }

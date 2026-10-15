@@ -276,3 +276,12 @@ details[open] > summary.nt-tit::after { transform:rotate(180deg); }
 .nt-sres .msel-chips { display:flex; flex-wrap:wrap; gap:5px; }
 .nt-sres .lnk.small { align-self:flex-start; font-size:12px; }
 .nt-suc-cond .nt-c-region { background:var(--rl-gray-50); color:var(--rl-gray-600); }
+.nt-tab td:nth-child(2) { width:96px; } .nt-tab td:nth-child(3) { width:130px; } .nt-tab td:nth-child(4) { width:84px; } .nt-tab td:nth-child(5) { width:130px; } .nt-tab td:nth-child(6) { width:40px; }
+.nt-tab tr.nt-linea td { border-top:none; padding-top:2px; }
+.nt-tab .lnk.small { font-size:12px; padding:0; }
+.nt-tab td:nth-child(2) { width:112px; } .nt-tab td:nth-child(4) { width:96px; } .nt-tab select { padding-right:24px; }
+.nt-exist { margin-top:10px; border:1px solid var(--rl-blue-100); background:#F5FAFD; border-radius:10px; padding:10px 12px; }
+.nt-exist > summary { cursor:pointer; font-size:13px; color:var(--rl-gray-700); }
+.nt-exist-tab { min-width:520px; margin-top:8px; background:#fff; font-size:12px; }
+.nt-exist-tab td, .nt-exist-tab th { padding:6px 10px; }
+.nt-exist-vacio { margin-top:6px; }
