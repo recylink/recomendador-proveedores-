@@ -72,8 +72,29 @@ function renderAuthBox() {
   const box = document.getElementById("authBox"); if (!box) return;
   const a = sesionActiva();
   box.innerHTML = a
-    ? '<span class="auth-mail" title="Sesión válida hasta ' + new Date(a.exp).toLocaleString("es-CL") + '">' + esc(a.email) + '</span> <button class="lnk" onclick="cerrarSesion()">Salir</button>'
+    ? '<button class="lnk" title="Código para que Claude (skill cargar-cotizacion) guarde tarifas a tu nombre" onclick="conectarClaude()">Conectar con Claude</button> ' +
+      '<span class="auth-mail" title="Sesión válida hasta ' + new Date(a.exp).toLocaleString("es-CL") + '">' + esc(a.email) + '</span> <button class="lnk" onclick="cerrarSesion()">Salir</button>'
     : '<button class="auth-btn" onclick="iniciarSesion().catch(()=>{})">Iniciar sesión</button>';
+}
+
+/** Código temporal (12 h) para que la skill cargar-cotizacion guarde tarifas a nombre de quien lo genera. */
+async function conectarClaude() {
+  abrirModal("claudeModal", '<h3>Conectar con Claude</h3><div class="spinner-row"><span class="spinner"></span> Generando código…</div>');
+  try {
+    const r = await api("token_claude", {}, true);
+    const texto = "Código del Recomendador para Claude (válido hasta " + new Date(r.exp).toLocaleString("es-CL") + "):\n" + r.token;
+    abrirModal("claudeModal", '<h3>Conectar con Claude</h3>' +
+      '<p>Copia este código y pégalo en el chat con Claude junto con la cotización. Con él, la skill <b>cargar-cotizacion</b> puede crear y editar tarifas <b>a tu nombre</b> (en el Historial queda "' + esc(sesionActiva().email) + ' (vía Claude)"). Siempre te mostrará un resumen y te pedirá confirmación antes de guardar.</p>' +
+      '<textarea id="claudeCodigo" rows="5" style="width:100%" readonly>' + esc(texto) + '</textarea>' +
+      '<p class="muted small">Vale 12 horas y solo sirve para tarifas (no cambia fichas de ClickUp ni sucursales). No lo compartas: quien lo tenga puede cargar tarifas como tú.</p>' +
+      '<div class="tf-acc"><span id="claudeSt" class="muted small"></span><button class="cbtn" onclick="copiarCodigoClaude()">Copiar código</button></div>');
+  } catch (e) {
+    abrirModal("claudeModal", '<h3>Conectar con Claude</h3><p class="warn">No se pudo generar el código: ' + esc(e.message) + '</p>');
+  }
+}
+function copiarCodigoClaude() {
+  const el = document.getElementById("claudeCodigo"), st = document.getElementById("claudeSt");
+  navigator.clipboard.writeText(el.value).then(() => { st.textContent = "Copiado."; }, () => { el.select(); st.textContent = "Selecciónalo y cópialo con Ctrl+C."; });
 }
 
 function guardarSesion(token) {
