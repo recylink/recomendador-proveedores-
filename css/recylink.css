@@ -231,3 +231,48 @@ tr.abierta .t-flecha { background:var(--rl-action); color:#fff; }
 .ref-acc { gap:6px; }
 .res-fila { display:flex; flex-wrap:wrap; gap:4px; max-width:320px; }
 .res-fila .chip { min-height:22px; padding:1px 9px; font-size:12px; }
+/* ---- Nueva tarifa por pasos ---- */
+.nt-paso { margin-top:18px; padding-top:16px; border-top:1px solid #EAECF0; }
+.nt-tit { display:flex; align-items:center; gap:10px; font-size:15px; font-weight:700; color:var(--rl-gray-900); margin-bottom:10px; }
+summary.nt-tit { cursor:pointer; list-style:none; }
+summary.nt-tit::-webkit-details-marker { display:none; }
+summary.nt-tit::after { content:"▾"; color:var(--rl-gray-400); font-size:12px; margin-left:auto; transition:transform .15s; }
+details[open] > summary.nt-tit::after { transform:rotate(180deg); }
+.nt-num { width:24px; height:24px; border-radius:999px; background:var(--rl-action); color:#fff; font-size:12px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; }
+.nt-info { margin-top:6px; color:var(--rl-gray-600); }
+.nt-tab { min-width:520px; margin:8px 0; }
+.nt-tab td { padding:8px 10px; vertical-align:middle; }
+.nt-tab th { padding:8px 10px; }
+.nt-tab input, .nt-tab select { min-height:36px; padding:6px 10px; font-size:13px; width:100%; }
+.nt-tab td:nth-child(2) { width:150px; } .nt-tab td:nth-child(3) { width:90px; } .nt-tab td:nth-child(4) { width:150px; }
+.nt-vacio { padding:10px 0; }
+.nt-cond { margin-top:10px; }
+.nt-cond > summary { cursor:pointer; font-size:13px; font-weight:600; color:var(--rl-action); }
+.nt-cond .tf-grid { margin-top:10px; padding-top:0; border-top:none; }
+.nt-cli .tf-grid { margin-top:8px; padding-top:0; border-top:none; }
+.nt-paso > input { width:100%; }
+.msel-escribir { display:flex; gap:8px; align-items:center; }
+.msel-escribir input { flex:1; }
+.nt-chk { display:inline-flex; align-items:center; gap:8px; height:40px; font-size:13px; font-weight:500; color:var(--rl-gray-700); }
+.nt-chk input { accent-color:var(--rl-action); width:16px; height:16px; min-height:0; box-shadow:none; }
+.nt-suc { margin-top:14px; padding:14px 16px; border:1px solid var(--rl-gray-200); border-radius:10px; background:var(--rl-gray-50); }
+.nt-suc-h { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:14px; margin-bottom:10px; }
+.nt-suc-h .lnk { margin-left:auto; }
+.nt-suc-cond { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px 12px; margin-bottom:6px; }
+.nt-suc-cond label { display:flex; flex-direction:column; gap:4px; font-size:12px; font-weight:500; color:var(--rl-gray-600); }
+.nt-suc-cond input, .nt-suc-cond select, .nt-suc-cond textarea { min-height:36px; padding:6px 10px; font-size:13px; width:100%; }
+.nt-suc-cond .nt-ancho { grid-column:1/-1; }
+.nt-suc .nt-tab { background:#fff; }
+@media (max-width:680px) { .nt-suc-cond { grid-template-columns:1fr 1fr; } }
+.nt-adj-box { margin:10px 0; padding:10px 12px; border:1px dashed var(--rl-gray-300); border-radius:10px; background:#fff; }
+.nt-adj-tit { font-size:12px; font-weight:600; color:var(--rl-gray-700); margin-bottom:6px; }
+.nt-adj { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 0; border-bottom:1px solid var(--rl-gray-100); }
+.nt-adj input[type=file] { min-height:0; box-shadow:none; border:none; padding:0; font-size:12px; max-width:230px; }
+.nt-adj-file { font-size:13px; font-weight:500; color:var(--rl-gray-900); max-width:230px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.nt-adj-res { display:flex; gap:4px 10px; flex-wrap:wrap; align-items:center; flex:1; }
+.nt-adj-chk { display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--rl-gray-700); }
+.nt-adj-chk input { width:14px; height:14px; min-height:0; box-shadow:none; accent-color:var(--rl-action); }
+.nt-sres { margin:8px 0; display:flex; flex-direction:column; gap:6px; }
+.nt-sres .msel-chips { display:flex; flex-wrap:wrap; gap:5px; }
+.nt-sres .lnk.small { align-self:flex-start; font-size:12px; }
+.nt-suc-cond .nt-c-region { background:var(--rl-gray-50); color:var(--rl-gray-600); }

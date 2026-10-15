@@ -354,24 +354,19 @@ function tarifasDeProveedor(s) {
 }
 
 /* ---------------- controles: selector con "Otro" y multiselector ---------------- */
+/** Campo de un valor: se elige de la lista sugerida o se escribe uno nuevo (se suma al catálogo al guardar). */
 function selOtroHtml(id, opciones, val, vacio, alCambiar) {
   const opts = (opciones || []).slice();
-  if (val && !opts.some(o => o.toLowerCase() === String(val).toLowerCase())) opts.push(val);
-  return '<select id="' + id + '" onchange="selOtroCambio(\'' + id + '\')' + (alCambiar ? ';' + alCambiar + '()' : '') + '">' +
-    (vacio != null ? '<option value="">' + esc(vacio) + '</option>' : '') +
-    opts.map(o => '<option value="' + esc(o) + '"' + (val && o.toLowerCase() === String(val).toLowerCase() ? ' selected' : '') + '>' + esc(o) + '</option>').join('') +
-    '<option value="__otro">Otro (escribir)…</option></select>' +
-    '<input id="' + id + '_otro" class="otro-inp" placeholder="Escribe el nuevo valor" style="display:none">';
+  return '<input id="' + id + '" list="dl-' + id + '" value="' + esc(val || "") + '" autocomplete="off" placeholder="' + esc(vacio && vacio !== "-" ? vacio : "Escribe o elige") + '"' +
+    (alCambiar ? ' oninput="' + alCambiar + '()" onchange="' + alCambiar + '()"' : '') + '>' +
+    '<datalist id="dl-' + id + '">' + opts.map(o => '<option value="' + esc(o) + '">').join('') + '</datalist>';
 }
-function selOtroCambio(id) {
-  const otro = document.getElementById(id).value === "__otro";
-  const i = document.getElementById(id + "_otro");
-  i.style.display = otro ? "" : "none";
-  if (otro) i.focus();
-}
+function selOtroCambio() { /* ya no hay opción "Otro": se escribe directo */ }
 function selOtroVal(id) {
-  const s = document.getElementById(id);
-  return s.value === "__otro" ? document.getElementById(id + "_otro").value.trim() : s.value;
+  const el = document.getElementById(id); if (!el) return "";
+  const v = el.value.trim();
+  const opts = [...((document.getElementById("dl-" + id) || {}).options || [])].map(o => o.value);
+  return opts.find(o => o.toLowerCase() === v.toLowerCase()) || v; // misma forma que el catálogo si coincide
 }
 
 /* Multiselector: chips + desplegable. cfg = { opciones, valores, otro, unico, placeholder, onChange } */
@@ -386,10 +381,19 @@ function mselInner(id) {
   const usados = m.valores.map(v => v.toLowerCase());
   const disp = m.opciones.filter(o => usados.indexOf(o.toLowerCase()) === -1);
   return '<div class="msel-chips">' + m.valores.map((v, i) => '<span class="mchip">' + esc(v) + '<button type="button" onclick="mselQuitar(\'' + id + '\',' + i + ')" aria-label="Quitar ' + esc(v) + '">×</button></span>').join('') + '</div>' +
-    '<select onchange="mselElegir(\'' + id + '\',this)" aria-label="' + esc(m.placeholder) + '"><option value="">' + esc(m.unico && m.valores.length ? "Cambiar…" : m.placeholder) + '</option>' +
-    disp.map(o => '<option value="' + esc(o) + '">' + esc(o) + '</option>').join('') +
-    (m.otro ? '<option value="__otro">Otro (escribir)…</option>' : '') + '</select>' +
-    (m.otro ? '<span class="msel-otro" style="display:none"><input placeholder="Nuevo valor" onkeydown="if(event.key===\'Enter\'){event.preventDefault();mselAgregarOtro(\'' + id + '\')}"><button type="button" class="lnk" onclick="mselAgregarOtro(\'' + id + '\')">Agregar</button></span>' : '');
+    // Con "otro": se escribe directo (sugerencias del catálogo); Enter o "Agregar" suma el valor, aunque sea nuevo.
+    (m.otro ? '<div class="msel-escribir"><input list="dl-' + id + '" placeholder="' + esc(m.placeholder.replace(/^\+\s*/, "Escribe o elige ") + " y presiona Enter") + '" ' +
+      'oninput="mselInputSugerido(\'' + id + '\',this,event)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();mselAgregar(\'' + id + '\',this.value)}">' +
+      '<button type="button" class="lnk" onclick="mselAgregar(\'' + id + '\',this.previousElementSibling.value)">Agregar</button>' +
+      '<datalist id="dl-' + id + '">' + disp.map(o => '<option value="' + esc(o) + '">').join('') + '</datalist></div>' : '') +
+    (m.otro ? '' : '<select onchange="mselElegir(\'' + id + '\',this)" aria-label="' + esc(m.placeholder) + '"><option value="">' + esc(m.unico && m.valores.length ? "Cambiar…" : m.placeholder) + '</option>') +
+    (m.otro ? '' : disp.map(o => '<option value="' + esc(o) + '">' + esc(o) + '</option>').join('') + '</select>');
+}
+/** Elegir una sugerencia de la lista la agrega al tiro; lo escrito a mano se agrega con Enter. */
+function mselInputSugerido(id, el, ev) {
+  const m = MSEL[id]; const v = el.value.trim(); if (!v) return;
+  const elegido = ev && ev.inputType === "insertReplacementText" || (!ev || !ev.inputType);
+  if (elegido && m.opciones.some(o => o.toLowerCase() === v.toLowerCase())) mselAgregar(id, v);
 }
 function mselRender(id) { const el = document.getElementById(id); if (el && MSEL[id]) el.innerHTML = mselInner(id); }
 function mselElegir(id, selEl) {
@@ -403,6 +407,7 @@ function mselAgregar(id, v) {
   if (m.unico) m.valores = [canon];
   else if (!m.valores.some(x => x.toLowerCase() === canon.toLowerCase())) m.valores.push(canon);
   mselRender(id); if (m.onChange) m.onChange();
+  const inp = document.querySelector("#" + id + " .msel-escribir input"); if (inp) inp.focus(); // seguir escribiendo
 }
 function mselAgregarOtro(id) { const i = document.querySelector("#" + id + " .msel-otro input"); if (i) mselAgregar(id, i.value); }
 function mselQuitar(id, i) { MSEL[id].valores.splice(i, 1); mselRender(id); if (MSEL[id].onChange) MSEL[id].onChange(); }
@@ -988,20 +993,21 @@ function referencialHtml(ts, opts) {
 }
 /** "+ Tarifa referencial": Valor general (precio de lista, sin cliente); los residuos se eligen en el formulario. */
 function botonNuevaReferencial(proveedor) {
-  const pre = { proveedor_nombre: proveedor, estado_servicio: "Valor general", tipo_transaccion: "cobra", fuente: "informal" };
-  return '<button class="cbtn sec mini" title="Precio de lista del proveedor, sin cliente: reemplaza al promedio" onclick="event.stopPropagation();abrirFormTarifa(null,' + esc(JSON.stringify(pre)) + ')">+ Tarifa referencial</button>';
+  const pre = { proveedor_nombre: proveedor };
+  return '<button class="cbtn sec mini" title="Precio de lista del proveedor, sin cliente: reemplaza al promedio" onclick="event.stopPropagation();abrirNuevaTarifa(' + esc(JSON.stringify(pre)) + ')">+ Tarifa referencial</button>';
 }
 /** "+ Tarifa cliente": lo que el proveedor cobra a una empresa/sucursal. */
 function botonNuevaTarifaCliente(proveedor) {
-  const pre = { proveedor_nombre: proveedor, estado_servicio: "Activo", tipo_transaccion: "cobra" };
-  return '<button class="cbtn sec mini" onclick="event.stopPropagation();abrirFormTarifa(null,' + esc(JSON.stringify(pre)) + ')">+ Tarifa cliente</button>';
+  const pre = { proveedor_nombre: proveedor, abrirCliente: true, estado_servicio: "Activo" };
+  return '<button class="cbtn sec mini" onclick="event.stopPropagation();abrirNuevaTarifa(' + esc(JSON.stringify(pre)) + ')">+ Tarifa cliente</button>';
 }
 /** "Editar" abre el Valor general existente; "Fijar valor" abre uno nuevo con el promedio ya escrito. */
 function botonReferencial(f) {
   // ✎ editar: el valor fijado si existe; si no, abre uno nuevo con el promedio ya escrito
   const pre = { proveedor_nombre: f.proveedor, residuo: f.residuo === "(sin residuo)" ? "" : f.residuo, unidad: f.unidad || "", estado_servicio: "Valor general", tipo_transaccion: f.tipo || "cobra", fuente: "informal",
     precio: f.ref != null ? Math.round(f.ref) : f.refUF != null ? Math.round(f.refUF * 100) / 100 : "", moneda: f.ref == null && f.refUF != null ? "UF" : "CLP" };
-  const editar = f.genId ? "abrirFormTarifa('" + esc(f.genId) + "')" : "abrirFormTarifa(null," + esc(JSON.stringify(pre)) + ")";
+  const nueva = { proveedor_nombre: pre.proveedor_nombre, residuos: pre.residuo ? [pre.residuo] : [], ref: pre.residuo ? { [pre.residuo]: { monto: pre.precio === "" ? "" : String(pre.precio), moneda: pre.moneda, unidad: pre.unidad } } : {} };
+  const editar = f.genId ? "abrirFormTarifa('" + esc(f.genId) + "')" : "abrirNuevaTarifa(" + esc(JSON.stringify(nueva)) + ")";
   const btnEditar = '<button class="ico-btn" title="Editar tarifa referencial" aria-label="Editar tarifa referencial" onclick="event.stopPropagation();' + editar + '">✎</button>';
   // − eliminar: solo un valor fijado a mano; el promedio sale de las tarifas de clientes
   const btnEliminar = f.genId
@@ -1117,7 +1123,7 @@ function abrirFormTarifa(id, prefill, grupo) {
       campo("f_incluye_disposicion", "¿Incluye disposición?", sel("f_incluye_disposicion", sn, v.incluye_disposicion)) +
       campo("f_fuente", "Fuente", selOtroHtml("f_fuente", CATS.fuente, v.fuente)) +
       campo("f_detalle", "Detalle del cobro (por qué cobra eso, condiciones)", '<textarea id="f_detalle" rows="3">' + esc(v.detalle || "") + '</textarea>', "span2") +
-      campo("f_pdf", "PDF de la cotización", (v.pdf_url ? '<div class="small"><a href="' + esc(v.pdf_url) + '" target="_blank" rel="noopener">Ver PDF actual</a> · subir otro reemplaza el enlace</div>' : '') + '<input id="f_pdf" type="file" accept="application/pdf">' + '<input id="f_pdf_url" type="hidden" value="' + esc(v.pdf_url || "") + '">', "span2") +
+      campo("f_pdf", "PDF respaldo", (v.pdf_url ? '<div class="small"><a href="' + esc(v.pdf_url) + '" target="_blank" rel="noopener">Ver PDF actual</a> · subir otro reemplaza el enlace</div>' : '') + '<input id="f_pdf" type="file" accept="application/pdf">' + '<input id="f_pdf_url" type="hidden" value="' + esc(v.pdf_url || "") + '">', "span2") +
     '</div>' +
     '<div class="tf-acc"><span id="f_status" class="muted small"></span>' +
       (FORM_COLA && FORM_COLA.length ? '<button class="lnk" onclick="siguienteDeCola()">Saltar esta</button>' : '') +
