@@ -285,3 +285,8 @@ details[open] > summary.nt-tit::after { transform:rotate(180deg); }
 .nt-exist-tab { min-width:520px; margin-top:8px; background:#fff; font-size:12px; }
 .nt-exist-tab td, .nt-exist-tab th { padding:6px 10px; }
 .nt-exist-vacio { margin-top:6px; }
+.et-baja td { opacity:.55; }
+.et-baja td b { text-decoration:line-through; }
+.et-acc { white-space:nowrap; }
+.et-pdf { cursor:pointer; }
+#editarTarifasModal .nt-adj-box a { margin-right:8px; }
