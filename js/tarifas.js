@@ -14,7 +14,7 @@ const UF_API = "https://mindicador.cl/api/uf";
 
 let TARIFAS = [];           // todas (activas y dadas de baja)
 let TARIFAS_STATUS = "no cargadas";
-let CATS = { residuo: [], unidad: [], contenedor: [], estado_cliente: ["activo", "inactivo", "prospecto"], estado_servicio: ["Activo", "Cotizado", "No tomado", "Terminado", "Valor general"], fuente: ["cotizacion", "plataforma", "informal", "carga inicial"], moneda: ["CLP", "UF"] };
+let CATS = { residuo: [], unidad: [], contenedor: [], estado_cliente: ["activo", "inactivo", "prospecto"], estado_servicio: ["Activo", "Cotizado", "No tomado", "Terminado", "Valor general"], fuente: TIPOS_FUENTE.slice(), moneda: ["CLP", "UF"] };
 let UF = { valor: null, fecha: "", origen: "" };
 let SUCURSALES = []; // lista maestra: { empresa, sucursal, direccion, comuna, region }
 
@@ -274,6 +274,7 @@ async function loadTarifas() {
         const vals = cats.slice(1).map(r => String(r[i] || "").trim()).filter(Boolean);
         if (vals.length) CATS[h] = vals;
       });
+      CATS.fuente = unicosOrdenados(TIPOS_FUENTE.concat((CATS.fuente || []).map(fuenteCanon))); // hasta migrar trae los valores anteriores
     }
     calcularAlertas();
     TARIFAS_STATUS = "OK (" + TARIFAS.filter(t => t.activo).length + " tarifas)";
@@ -299,6 +300,10 @@ function prepararTarifa(t) {
   t.tipo = tget(t, "tipo_transaccion").toLowerCase() === "paga" ? "paga" : "cobra";
   t.sucursal = tget(t, "sucursal");
   t.estado_servicio = tget(t, "estado_servicio");
+  // Esquema V2: tipo de servicio (las anteriores a la migración lo deducen de los sí/no) y tipo de fuente
+  t.tipo_servicio = tipoServicioCanon(tget(t, "tipo_servicio")) || tipoServicioDeSiNo(t);
+  t.fuente = fuenteCanon(t.fuente);
+  t.volumen_num = numDe(t.volumen_m3);
   return t;
 }
 
@@ -328,7 +333,7 @@ function clpDe(t) {
 
 function grupoKey(t) {
   // "cobra" y "paga" nunca se comparan entre sí
-  return [t.tipo, norm(t.residuo), norm(t.unidad), norm(t.contenedor), t.incluye_transporte, t.incluye_disposicion, t.region || ""].join("|");
+  return [t.tipo, norm(t.residuo), norm(t.unidad), contKey(t), t.tipo_servicio, t.region || ""].join("|");
 }
 
 /** Por grupo comparable y por (proveedor, empresa, sucursal), la más reciente es la vigente. */
@@ -355,18 +360,26 @@ function calcularAlertas() {
   const grupos = {};
   activas.filter(t => t.vigente).forEach(t => { (grupos[grupoKey(t)] = grupos[grupoKey(t)] || []).push(t); });
   TARIFAS.forEach(t => {
+    // Cada alerta dice qué campos del formulario hay que completar o revisar
     const a = [];
-    if (t.precio_num == null) a.push("Sin precio");
-    else if (t.precio_num <= 1) a.push("Precio de " + (t.moneda === "UF" ? t.precio_num + " UF" : fmtCLP(t.precio_num)) + ": posible valor de relleno");
-    if (!tget(t, "unidad")) a.push("Falta la unidad");
-    if (!tget(t, "direccion") && !tget(t, "comuna")) a.push("Falta la dirección o comuna");
+    const al = (txt, campos, ayuda) => a.push({ txt, campos, ayuda });
+    if (t.precio_num == null) al("Sin precio", ["f_precio", "f_moneda"], "Ingresa el monto neto (sin IVA) y la moneda.");
+    else if (t.precio_num <= 1 && !String(tget(t, "detalle") || "").trim()) al("Precio de " + (t.moneda === "UF" ? t.precio_num + " UF" : fmtCLP(t.precio_num)) + ": posible valor de relleno", ["f_precio", "f_detalle"], "Revisa el monto. Si es correcto, explícalo en el Detalle.");
+    if (!tget(t, "unidad")) al("Falta la unidad", ["f_unidad"], "Indica por qué se cobra: kg, ton, m3, viaje, retiro, mes…");
+    if (!esGeneral(t) && !tget(t, "direccion") && !tget(t, "comuna")) al("Falta la dirección o comuna", ["f_direccion", "f_comunas"], "Indica dónde se retira el residuo (dirección o al menos la comuna).");
     const pares = (grupos[grupoKey(t)] || []).filter(x => x !== t).map(clpDe).filter(v => v != null);
     const v = clpDe(t);
     if (pares.length >= 2 && v != null && v > 1) {
       const m = mediana(pares);
-      if (m && Math.abs(v - m) / m > 0.5) a.push("Precio " + (v > m ? "más de 50% sobre" : "más de 50% bajo") + " la mediana de comparables (" + fmtCLP(m) + ")");
+      if (m && Math.abs(v - m) / m > 0.5) al("Precio " + (v > m ? "más de 50% sobre" : "más de 50% bajo") + " la mediana de comparables (" + fmtCLP(m) + ")", ["f_precio", "f_unidad", "f_detalle"], "Confirma el monto y la unidad. Si son correctos, explica en el Detalle por qué difiere.");
     }
-    t.alertas = a;
+    // Esquema V2: campos obligatorios que le faltan (las cargadas antes de V2 los tienen pendientes)
+    if (t.activo) {
+      const f = faltantesMinimos(t).filter(x => !["monto", "unidad"].includes(x.txt)); // esos ya tienen su propia alerta
+      if (f.length) al("Faltan datos: " + f.map(x => x.txt).join(", "), [...new Set(f.map(x => x.campo))], "Son obligatorios desde el esquema de Ecosistema 3.0.");
+    }
+    t.alertaInfo = a;
+    t.alertas = a.map(x => x.txt);
   });
 }
 
@@ -446,8 +459,71 @@ function precioHtml(t) {
     (paga ? '<div class="t-paga small">recibe el cliente</div>' : '');
 }
 
-function alertaHtml(t) {
-  return t.alertas && t.alertas.length ? '<span class="t-alerta" title="' + esc(t.alertas.join("\n")) + '">⚠ ' + t.alertas.length + '</span>' : '';
+function alertaHtml(t) { return alertaBadge([t]); }
+
+/* ---------------- alertas: detalle al pasar el mouse, campos a completar al hacer clic ---------------- */
+const ALERTA_SETS = {}; let ALERTA_SEQ = 0;
+/** Insignia ⚠ para una o varias tarifas. n = número a mostrar (por defecto, cuántas alertas distintas hay). */
+function alertaBadge(ts, n) {
+  const con = (ts || []).filter(t => t && t.alertas && t.alertas.length);
+  if (!con.length) return '';
+  const k = "a" + (++ALERTA_SEQ);
+  ALERTA_SETS[k] = con.map(t => t.id);
+  const num = n != null ? n : new Set(con.flatMap(t => t.alertas)).size;
+  return '<span class="t-alerta" data-al="' + k + '" onclick="event.stopPropagation(); abrirAlertas(\'' + k + '\')" onmouseenter="mostrarTipAlerta(this)" onmouseleave="ocultarTipAlerta()">⚠ ' + num + '</span>';
+}
+
+function tarifasDeAlerta(k) { return (ALERTA_SETS[k] || []).map(id => TARIFAS.find(t => t.id === id)).filter(Boolean); }
+
+function mostrarTipAlerta(el) {
+  const ts = tarifasDeAlerta(el.dataset.al); if (!ts.length) return;
+  let tip = document.getElementById("alertaTip");
+  if (!tip) { tip = document.createElement("div"); tip.id = "alertaTip"; tip.className = "alerta-tip"; document.body.appendChild(tip); }
+  const cuenta = {};
+  ts.forEach(t => t.alertas.forEach(a => { cuenta[a] = (cuenta[a] || 0) + 1; }));
+  tip.innerHTML = '<b>Alertas</b><ul>' + Object.keys(cuenta).map(a => '<li>' + esc(a) + (ts.length > 1 ? ' <span class="muted">· ' + cuenta[a] + ' tarifa' + (cuenta[a] > 1 ? 's' : '') + '</span>' : '') + '</li>').join('') + '</ul>' +
+    '<div class="muted small">Haz clic para ver qué completar.</div>';
+  tip.style.display = "block";
+  const r = el.getBoundingClientRect(), w = tip.offsetWidth;
+  tip.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left)) + "px";
+  const abajo = r.bottom + 6 + tip.offsetHeight < window.innerHeight;
+  tip.style.top = (abajo ? r.bottom + 6 : r.top - tip.offsetHeight - 6) + "px";
+}
+function ocultarTipAlerta() { const tip = document.getElementById("alertaTip"); if (tip) tip.style.display = "none"; }
+
+const NOMBRE_CAMPO = { f_precio: "Monto", f_moneda: "Moneda", f_unidad: "Unidad de cobro", f_direccion: "Dirección", f_comunas: "Comuna", f_detalle: "Detalle",
+  f_tipo_servicio: "Tipo de servicio", f_volumen_m3: "Volumen", f_motivo_precio: "Motivo del precio", f_fuente: "Tipo de fuente", f_fuente_ref: "Referencia de la fuente",
+  f_comuna_destino: "Comuna de destino", f_contenedores: "Contenedor", f_sucursales: "Sucursal", f_residuos: "Residuo", f_fecha: "Fecha", f_proveedor: "Proveedor" };
+function abrirAlertas(k) {
+  ocultarTipAlerta();
+  const ts = tarifasDeAlerta(k); if (!ts.length) return;
+  // Un solo proveedor: se abre "Editar tarifas" (mismo formato que Nueva tarifa) con las tarifas con alerta destacadas
+  const provs = [...new Set(ts.map(t => t.provKey))];
+  if (provs.length === 1 && ts.some(t => t.activo)) { abrirEditarTarifas(ts[0].proveedor_nombre, ts.map(t => t.id)); return; }
+  abrirModal("alertasModal", '<h3>Alertas' + (ts.length > 1 ? ' (' + ts.length + ' tarifas)' : '') + '</h3>' +
+    '<p class="small muted">Completa los campos marcados. Al abrir la tarifa quedan destacados en el formulario.</p>' +
+    ts.map(t => '<div class="al-tarifa">' +
+      '<div class="al-cab"><div><b>' + esc(t.proveedor_nombre || "-") + '</b> · ' + empresaHtml(t) +
+        '<div class="small">' + esc([t.residuo, contenedorTxt(t), t.unidad].filter(Boolean).join(" · ")) + ' — ' + precioHtml(t) + '</div></div>' +
+        (t.activo ? '<button class="cbtn" onclick="completarAlertas(\'' + esc(t.id) + '\')">Completar</button>' : '<span class="muted small">dada de baja</span>') + '</div>' +
+      '<ul>' + t.alertaInfo.map(a => '<li><span class="warn">⚠ ' + esc(a.txt) + '</span><div class="small">Campos: <b>' + esc(a.campos.map(c => NOMBRE_CAMPO[c] || c).join(", ")) + '</b>. ' + esc(a.ayuda) + '</div></li>').join('') + '</ul>' +
+    '</div>').join(''));
+}
+
+/** Abre la tarifa en el formulario con los campos de sus alertas destacados. */
+function completarAlertas(id) {
+  const t = TARIFAS.find(x => x.id === id); if (!t) return;
+  cerrarModal("alertasModal");
+  abrirFormTarifa(id);
+  const campos = [...new Set(t.alertaInfo.flatMap(a => a.campos))];
+  let primero = null;
+  campos.forEach(c => {
+    const el = document.getElementById(c); if (!el) return;
+    const caja = el.closest(".tf-campo") || el;
+    caja.classList.add("campo-falta");
+    if (!primero) primero = el;
+  });
+  if (primero) { primero.scrollIntoView({ block: "center" }); const i = primero.matches("input,select,textarea") ? primero : primero.querySelector("input,select,textarea"); if (i) i.focus(); }
 }
 
 function siNoTxt(v, txt) { return v === "si" ? "con " + txt : v === "no" ? "sin " + txt : txt + " ¿?"; }
@@ -471,7 +547,7 @@ function filaTarifaHtml(t, opts) {
   return '<tr class="' + (t.activo ? "" : "t-baja ") + (t.vigente || !t.activo ? "" : "t-anterior ") + (opts.best ? "best" : "") + (opts.sub ? " t-sub" : "") + '"' + (opts.sub ? ' data-grp="' + opts.sub + '" style="display:none"' : '') + '>' +
     (opts.sinProveedor ? '' : '<td><b>' + esc(t.proveedor_nombre || "-") + '</b>' + (opts.best ? ' <span class="t-best">★ ' + (t.tipo === "paga" ? "paga más" : "menor") + '</span>' : '') + '</td>') +
     '<td>' + empresaHtml(t) + '</td>' +
-    (opts.conServicio ? '<td>' + esc(t.residuo || "-") + (t.tipo === "paga" ? ' <span class="pill p-paga">paga</span>' : '') + '<div class="muted small">' + esc([t.contenedor, siNoTxt(t.incluye_transporte, "transp."), siNoTxt(t.incluye_disposicion, "disp.")].filter(Boolean).join(" · ")) + '</div>' +
+    (opts.conServicio ? '<td>' + esc(t.residuo || "-") + (t.tipo === "paga" ? ' <span class="pill p-paga">paga</span>' : '') + '<div class="muted small">' + esc([t.tipo_servicio, contenedorTxt(t)].filter(Boolean).join(" · ")) + '</div>' +
       (t.detalle ? '<div class="t-detalle-txt">' + esc(t.detalle).replace(/\n/g, '<br>') + '</div>' : '') + '</td>' : '') +
     '<td>' + esc(lugar || "-") + (cant ? '<div class="muted small">cant. ' + esc(cant) + '</div>' : '') + '</td>' +
     '<td class="num">' + precioHtml(t) + '</td>' +
@@ -490,7 +566,7 @@ function filaTarifaHtml(t, opts) {
 /** Condiciones que deben coincidir para juntar tarifas (varían residuo, contenedor, sucursal, lugar, fecha y detalle). */
 function condKey(t) {
   return [t.provKey, norm(t.cliente), norm(t.unidad), t.precio_num ?? "", t.moneda,
-    t.incluye_transporte, t.incluye_disposicion, t.tipo, norm(t.estado_servicio), t.cantidad_min_num ?? "", t.cantidad_max_num ?? ""].join("|");
+    t.tipo_servicio, t.tipo, norm(t.estado_servicio), t.cantidad_min_num ?? "", t.cantidad_max_num ?? ""].join("|");
 }
 /** Junta una lista en grupos por condiciones (más vigencia/baja, para no mezclar históricos). */
 function agruparPorCondiciones(ts) {
@@ -524,7 +600,7 @@ function filaGrupoHtml(ts, opts) {
   const principal =
     '<tr class="t-fila ' + (t0.activo ? "" : "t-baja ") + (t0.vigente || !t0.activo ? "" : "t-anterior ") + '" onclick="verDetalle(\'' + gid + '\', this)">' +
       (opts.sinProveedor ? '' : '<td><span class="t-flecha">▸</span> <b>' + esc(t0.proveedor_nombre || "-") + '</b>' +
-        (alertas.length ? ' <span class="t-alerta" title="' + esc(alertas.join("\n")) + '">⚠ ' + alertas.length + '</span>' : '') + '</td>') +
+        (alertas.length ? ' ' + alertaBadge(ts) : '') + '</td>') +
       '<td>' + (opts.sinProveedor ? '<span class="t-flecha">▸</span> ' : '') + listaCorta(ts.map(t => t.residuo), 4) +
         (t0.tipo === "paga" ? ' <span class="pill p-paga">paga</span>' : '') + '</td>' +
       '<td class="num">' + precioHtml(t0) + '</td>' +
@@ -537,12 +613,15 @@ function filaGrupoHtml(ts, opts) {
     '<tr class="t-detalle" data-det="' + gid + '" style="display:none"><td colspan="' + columnas + '">' +
       (opts.sinProveedor ? '' : contactoProveedorTarifa(t0)) +
       '<div class="t-datos">' +
-        dato("Contenedor / vehículo", lista(ts.map(t => t.contenedor), 6)) +
-        dato("Transporte", esc(t0.incluye_transporte === "no" ? "No incluye" : "Incluye")) +
-        dato("Disposición final", esc(t0.incluye_disposicion === "no" ? "No incluye" : "Incluye")) +
+        dato("Contenedor / vehículo", lista(ts.map(contenedorTxt), 6)) +
+        dato("Tipo de servicio", lista(ts.map(t => t.tipo_servicio), 3)) +
+        dato("Volumen", lista(ts.map(t => { const v = volumenEf(t); return v != null ? fmtNum(v, 2) + " m³" : ""; }), 4)) +
+        dato("Motivo del precio", lista(ts.map(t => t.motivo_precio), 3)) +
+        dato("Condición de pago", lista(ts.map(t => tget(t, "condicion_pago_dias") ? tget(t, "condicion_pago_dias") + " días" : ""), 3)) +
+        dato("Destino", lista(ts.map(t => [t.destino, t.comuna_destino].filter(Boolean).join(" · ")), 3)) +
         dato("Estado del servicio", estadoServicioPill(t0) || '<span class="muted">-</span>') +
         dato("PDF", pdfs.length ? pdfs.map((u, i) => '<a href="' + esc(u) + '" target="_blank" rel="noopener">PDF' + (pdfs.length > 1 ? ' ' + (i + 1) : '') + '</a>').join(' · ') : '<span class="muted">sin PDF</span>') +
-        dato("Fuente", esc(t0.fuente || "-") + (t0.fecha ? ' · fecha de la tarifa ' + esc(t0.fecha) : '')) +
+        dato("Fuente", esc(t0.fuente || "-") + (tget(t0, "fuente_ref") ? ' · ' + esc(t0.fuente_ref) : '') + (t0.fecha ? ' · fecha de la tarifa ' + esc(t0.fecha) : '')) +
         detallesCobroHtml(ts) +
       '</div>' +
       tablaSucursalesHtml(ts) +
@@ -889,7 +968,7 @@ function filaProveedorHtml(ts) {
   const actualizado = ts.map(t => String(t.actualizado_el || t.fecha || "").slice(0, 10)).sort().pop();
   const principal =
     '<tr class="t-fila" onclick="verDetalle(\'' + gid + '\', this)">' +
-      '<td><span class="t-flecha">▸</span> <b>' + esc(t0.proveedor_nombre || "-") + '</b>' + (alertas ? ' <span class="t-alerta">⚠ ' + alertas + '</span>' : '') +
+      '<td><span class="t-flecha">▸</span> <b>' + esc(t0.proveedor_nombre || "-") + '</b>' + (alertas ? ' ' + alertaBadge(ts, alertas) : '') +
         '<div class="muted small">' + ts.length + ' tarifa' + (ts.length > 1 ? 's' : '') + '</div>' + contactoCortoTarifa(t0) + '</td>' +
       '<td>' + residuosFilaHtml(t0, ts) + '</td>' +
       '<td class="num">' + refCorta + '</td>' +
@@ -1015,7 +1094,7 @@ function referencialHtml(ts, opts) {
   filas.sort((a, b) => (b.conPrecio - a.conPrecio) || String(a.residuo).localeCompare(String(b.residuo), "es"));
   filas.forEach(f => { if (!f.proveedor) f.proveedor = opts.proveedor; });
   const n = ts.filter(t => t.vigente && t.alertas && t.alertas.length).length;
-  return '<div class="ref-box"><span class="t-etq">' + esc(opts.titulo || "Tarifa referencial") + (n ? ' <span class="t-alerta">⚠ ' + n + '</span>' : '') + '</span>' +
+  return '<div class="ref-box"><span class="t-etq">' + esc(opts.titulo || "Tarifa referencial") + (n ? ' ' + alertaBadge(ts.filter(t => t.vigente), n) : '') + '</span>' +
     '<table class="ttar ref-tab">' + filas.map(f => '<tr' + (f.sinTarifas ? ' class="ref-sin"' : '') + '><td>' + esc(f.residuo) + (f.paga ? ' <span class="pill p-paga">paga</span>' : '') + '</td><td class="num">' + (f.sinTarifas ? '<span class="muted">—</span>' : refPrecioHtml(f)) + '</td><td class="muted small">' + esc(f.nota) + '</td>' +
       '<td><span class="ref-acc">' + botonReferencial(f) + '</span></td></tr>').join('') + '</table>' +
     (opts.proveedor && !opts.soloConPrecio ? '<div class="sec-acc">' + botonNuevaReferencial(opts.proveedor) + '</div>' : '') + '</div>';
@@ -1115,12 +1194,11 @@ function abrirFormTarifa(id, prefill, grupo) {
   FORM_ORIG = t || null;
   // Editar una tarifa funciona como un grupo de una: se pueden sumar residuos, contenedores o sucursales.
   FORM_GRUPO = grupo && grupo.length ? grupo : (t ? [t] : null);
-  const v = Object.assign({ moneda: "CLP", fuente: "cotizacion", estado_cliente: "activo", estado_servicio: "Cotizado", tipo_transaccion: "cobra", fecha: new Date().toISOString().slice(0, 10) }, t || {}, prefill || {});
+  const v = Object.assign({ moneda: "CLP", fuente: "", estado_cliente: "activo", estado_servicio: "Cotizado", tipo_transaccion: "cobra", fecha: new Date().toISOString().slice(0, 10) }, t || {}, prefill || {});
   if (t) { v.precio = t.precio_num == null ? "" : t.precio_num; v.cantidad_min = t.cantidad_min_num ?? ""; v.cantidad_max = t.cantidad_max_num ?? ""; v.tipo_transaccion = t.tipo; }
   const residuos = [].concat(v.residuos || v.residuo || []).filter(Boolean);
   const comunas = [].concat(v.comunas || v.comuna || []).filter(Boolean).map(comunaCanonica);
-  const sn = [["si", "Sí"], ["no", "No"]]; // por defecto Sí, salvo que la cotización lo excluya
-  if (!t && !FORM_GRUPO) { v.incluye_transporte = siNo(v.incluye_transporte) || "si"; v.incluye_disposicion = siNo(v.incluye_disposicion) || "si"; }
+  if (!v.tipo_servicio && (v.incluye_transporte || v.incluye_disposicion)) v.tipo_servicio = tipoServicioDeSiNo(v);
   const sucursales = [].concat(v.sucursales || v.sucursal || []).filter(Boolean);
   const contenedores = [].concat(v.contenedores || v.contenedor || []).filter(Boolean);
   const multi = true; // siempre se pueden elegir varios residuos/contenedores/sucursales (una tarifa por combinación)
@@ -1138,7 +1216,7 @@ function abrirFormTarifa(id, prefill, grupo) {
       campo("f_cliente", "Empresa", inp("f_cliente", v.cliente, 'list="clienteDL" autocomplete="off" placeholder="Ej: COPEC" oninput="mselOpciones(\'f_sucursales\', sucursalesDe(this.value))"'), "dep-cliente") +
       campo("f_sucursales", multi ? "Sucursal(es) <span class=\"muted\">· varias = una tarifa por cada una</span>" : "Sucursal", mselHtml("f_sucursales", { opciones: sucursalesDe(v.cliente), valores: sucursales, otro: true, unico: !multi, placeholder: "+ elegir sucursal", onChange: alCambiarSucursales }) + '<div id="f_suc_info" class="small muted"></div>', "dep-cliente span2") +
       campo("f_residuos", multi ? "Residuo(s) * <span class=\"muted\">· varios = una tarifa por cada uno</span>" : "Residuo *", mselHtml("f_residuos", { opciones: CATS.residuo || [], valores: residuos, otro: true, unico: !multi, placeholder: "+ elegir residuo" }), "span2") +
-      campo("f_contenedores", multi ? "Contenedor(es) / vehículo(s) <span class=\"muted\">· varios = una tarifa por cada uno</span>" : "Contenedor / vehículo", mselHtml("f_contenedores", { opciones: CATS.contenedor || [], valores: contenedores, otro: true, unico: !multi, placeholder: "+ elegir contenedor o vehículo" }), "span2") +
+      campo("f_contenedores", multi ? "Contenedor(es) / vehículo(s) <span class=\"muted\">· varios = una tarifa por cada uno</span>" : "Contenedor / vehículo", mselHtml("f_contenedores", { opciones: contenedoresCatalogo(), valores: contenedores.map(contenedorBase), otro: true, unico: !multi, placeholder: "+ elegir contenedor o vehículo" }), "span2") +
       campo("f_unidad", "Unidad de cobro", selOtroHtml("f_unidad", CATS.unidad, v.unidad, "-")) +
       (enGrupo && !t ? '' :
       campo("f_direccion", "Dirección del servicio", inp("f_direccion", v.direccion, 'placeholder="Calle, número, comuna" oninput="autoComuna()"'), "span2") +
@@ -1148,9 +1226,7 @@ function abrirFormTarifa(id, prefill, grupo) {
       campo("f_moneda", "Moneda", sel("f_moneda", CATS.moneda, v.moneda)) +
       campo("f_cant", "Cantidad mín. – máx.", '<div class="tf-dos">' + inp("f_cantidad_min", v.cantidad_min, 'inputmode="decimal" placeholder="mín"') + inp("f_cantidad_max", v.cantidad_max, 'inputmode="decimal" placeholder="máx"') + '</div>') +
       campo("f_fecha", "Fecha de la tarifa", '<input id="f_fecha" type="date" value="' + esc(v.fecha) + '">') +
-      campo("f_incluye_transporte", "¿Incluye transporte?", sel("f_incluye_transporte", sn, v.incluye_transporte)) +
-      campo("f_incluye_disposicion", "¿Incluye disposición?", sel("f_incluye_disposicion", sn, v.incluye_disposicion)) +
-      campo("f_fuente", "Fuente", selOtroHtml("f_fuente", CATS.fuente, v.fuente)) +
+      camposV2Html(v, v.proveedor_nombre) +
       campo("f_detalle", "Detalle del cobro (por qué cobra eso, condiciones)", '<textarea id="f_detalle" rows="3">' + esc(v.detalle || "") + '</textarea>', "span2") +
       campo("f_pdf", "PDF respaldo", (v.pdf_url ? '<div class="small"><a href="' + esc(v.pdf_url) + '" target="_blank" rel="noopener">Ver PDF actual</a> · subir otro reemplaza el enlace</div>' : '') + '<input id="f_pdf" type="file" accept="application/pdf">' + '<input id="f_pdf_url" type="hidden" value="' + esc(v.pdf_url || "") + '">', "span2") +
     '</div>' +
@@ -1221,9 +1297,9 @@ function leerFormulario() {
     precio: g("f_precio") === "" ? "" : numDe(g("f_precio")), moneda: g("f_moneda"),
     cantidad_min: g("f_cantidad_min") === "" ? "" : numDe(g("f_cantidad_min")),
     cantidad_max: g("f_cantidad_max") === "" ? "" : numDe(g("f_cantidad_max")),
-    incluye_transporte: g("f_incluye_transporte"), incluye_disposicion: g("f_incluye_disposicion"),
-    fecha: g("f_fecha"), fuente: selOtroVal("f_fuente"), detalle: g("f_detalle"), pdf_url: g("f_pdf_url")
+    fecha: g("f_fecha"), detalle: g("f_detalle"), pdf_url: g("f_pdf_url")
   };
+  Object.assign(base, leerCamposV2(g));
   ["precio", "cantidad_min", "cantidad_max"].forEach(k => { if (base[k] === null) throw new Error("Revisa el número en " + k.replace("_", " ") + "."); });
   if (!base.proveedor_nombre) throw new Error("Falta el proveedor.");
   const general = norm(base.estado_servicio) === "VALORGENERAL";
@@ -1256,12 +1332,16 @@ function leerFormulario() {
 }
 
 async function asegurarCatalogos(datos) {
-  for (const c of ["residuo", "unidad", "contenedor", "estado_cliente", "estado_servicio", "fuente"]) {
+  for (const c of ["residuo", "unidad", "contenedor", "estado_cliente", "estado_servicio", "tipo_servicio", "fuente"]) {
     const v = datos[c]; if (!v) continue;
-    const existe = (CATS[c] || []).find(x => x.toLowerCase() === String(v).toLowerCase());
+    // las listas fijas (tipo de servicio, tipo de fuente, contenedores) también cuentan como catálogo
+    const lista = (CATS[c] || []).concat(c === "tipo_servicio" ? TIPOS_SERVICIO : c === "fuente" ? TIPOS_FUENTE : c === "contenedor" ? contenedoresCatalogo() : []);
+    const existe = lista.find(x => x.toLowerCase() === String(v).toLowerCase());
     if (existe) { datos[c] = existe; continue; }
-    const r = await api("catalogo_agregar", { catalogo: c, valor: v }, true);
-    datos[c] = r.valor; (CATS[c] = CATS[c] || []).push(r.valor);
+    try {
+      const r = await api("catalogo_agregar", { catalogo: c, valor: v }, true);
+      datos[c] = r.valor; (CATS[c] = CATS[c] || []).push(r.valor);
+    } catch (e) { console.warn("No se pudo agregar al catálogo", c, v, e.message); } // el catálogo no debe impedir guardar la tarifa
   }
 }
 
@@ -1284,6 +1364,13 @@ async function guardarTarifa() {
     const conDirForm = nuevasSucursales.filter(x => x.direccion || x.comuna);
     if (conDirForm.length > 1 && !FORM_ORIG && !confirm("Las sucursales nuevas " + conDirForm.map(x => x.sucursal).join(", ") + " quedarán con la dirección " + [conDirForm[0].direccion, conDirForm[0].comuna].filter(Boolean).join(", ") + ". ¿Continuar? (Si son distintas, cárgalas de a una.)")) return;
     if (sinDir.length && !FORM_ORIG && !confirm("No hay dirección para: " + sinDir.map(x => x.sucursal).join(", ") + ". ¿Guardar igual? (La puedes completar después en Sucursales.)")) return;
+    const faltan = lista.map(d => ({ d, f: faltantesMinimos(d) })).filter(x => x.f.length);
+    if (faltan.length) {
+      marcarFaltantes([].concat(...faltan.map(x => x.f)));
+      const msg = textoFaltantes(faltan[0].d, faltan[0].f) + (faltan.length > 1 ? " (y " + (faltan.length - 1) + " tarifa(s) más)" : "");
+      if (!FORM_GRUPO) throw new Error(msg); // tarifa nueva: no se guarda sin los mínimos
+      if (!confirm(msg + "\n\n¿Guardar los cambios igual? Quedarán con la alerta hasta completarlos.")) return;
+    }
     if (FORM_GRUPO) return await guardarGrupo(lista[0], residuos, sucursales, contenedores, st, btn);
     if (!enClickUp && !FORM_ORIG && !confirm("“" + lista[0].proveedor_nombre + "” no está en ClickUp. ¿Guardar igual solo con el nombre?")) return;
     if (lista.length > 1 && !confirm("Se crearán " + lista.length + " tarifas (una por cada residuo, contenedor, sucursal y comuna). ¿Continuar?")) return;
@@ -1319,7 +1406,7 @@ async function guardarTarifa() {
 /** Edición en grupo: aplica los datos comunes a todas, crea las combinaciones nuevas y da de baja las quitadas. */
 async function guardarGrupo(base, residuos, sucursales, contenedores, st, btn) {
   const grupo = FORM_GRUPO;
-  const clave = (r, co, su) => norm(r) + "|" + norm(co) + "|" + norm(su);
+  const clave = (r, co, su) => norm(r) + "|" + norm(contenedorBase(co)) + "|" + norm(su); // "Batea 30 m3" = "Batea"
   const deseadas = {};
   residuos.forEach(r => (contenedores.length ? contenedores : [""]).forEach(co => (sucursales.length ? sucursales : [""]).forEach(su => { deseadas[clave(r, co, su)] = { r, co, su }; })));
   const comunes = Object.assign({}, base);
@@ -1469,6 +1556,52 @@ async function verHistorial(id) {
   }
 }
 
+/* ---------------- condición de pago de una empresa ---------------- */
+/** Condición de pago (días) para todas las tarifas activas de una empresa (todas sus sucursales). */
+function abrirAplicarEmpresa() {
+  const empresas = unicosOrdenados(TARIFAS.filter(t => t.activo && t.cliente).map(t => t.cliente));
+  abrirModal("aplicarEmpModal",
+    '<h3>Condición de pago de una empresa</h3>' +
+    '<p class="small muted">Cambia los días de pago en todas las tarifas activas de la empresa, en todas sus sucursales y proveedores. Cada cambio queda en el Historial.</p>' +
+    '<div class="tf-grid">' +
+      campo("ae_emp", "Empresa", sel("ae_emp", [["", "— elegir —"]].concat(empresas.map(e => [e, e])), "").replace("<select", '<select onchange="aeResumen()"')) +
+      campo("ae_pago", "Condición de pago (días)", inp("ae_pago", "", 'inputmode="numeric" placeholder="Ej: 30" oninput="aeResumen()"')) +
+    '</div>' +
+    '<div class="tf-acc"><span id="ae_status" class="muted small"></span><button class="cbtn" id="ae_btn" onclick="aeGuardar()">Aplicar</button></div>');
+}
+function aeArmar() {
+  const g = id => ((document.getElementById(id) || {}).value || "").trim();
+  const emp = g("ae_emp"), pagoTxt = g("ae_pago");
+  const pago = pagoTxt === "" ? "" : numDe(pagoTxt);
+  if (pago === null) throw new Error("Revisa los días de pago.");
+  const ts = emp ? TARIFAS.filter(t => t.activo && norm(t.cliente) === norm(emp)) : [];
+  const editar = ts.map(t => {
+    const c = {};
+    if (pago !== "" && numDe(t.condicion_pago_dias) !== pago) c.condicion_pago_dias = pago;
+    return { id: t.id, cambios: c };
+  }).filter(e => Object.keys(e.cambios).length);
+  return { emp, ts, editar, sucursales: unicosOrdenados(ts.map(t => t.sucursal)).length };
+}
+function aeResumen() {
+  const st = document.getElementById("ae_status");
+  try { const a = aeArmar(); st.textContent = a.emp ? a.ts.length + " tarifa(s) activas en " + a.sucursales + " sucursal(es) · " + a.editar.length + " cambian." : ""; }
+  catch (e) { st.textContent = e.message; }
+}
+async function aeGuardar() {
+  const st = document.getElementById("ae_status"), btn = document.getElementById("ae_btn");
+  try {
+    const a = aeArmar();
+    if (!a.editar.length) throw new Error("No hay cambios que aplicar.");
+    if (!confirm("Se actualizarán " + a.editar.length + " tarifa(s) de " + a.emp + ". ¿Continuar?")) return;
+    if (!sesionActiva()) await iniciarSesion();
+    btn.disabled = true;
+    const r = await guardarPlan({ crear: [], editar: a.editar }, st);
+    st.textContent = "Listo: " + r.editadas + " tarifa(s) actualizadas.";
+    setTimeout(() => cerrarModal("aplicarEmpModal"), 1200);
+  } catch (e) { st.textContent = "Error: " + e.message; }
+  finally { if (btn) btn.disabled = false; }
+}
+
 /* ---------------- pegar desde Claude ---------------- */
 function abrirPegarClaude() {
   abrirModal("pegarModal",
@@ -1506,7 +1639,8 @@ function sucursalRegistrada(empresa, nombre) {
 /** Líneas de tarifa (de Claude o de una planilla) → tarifas listas para guardar, con los datos comunes de la cabecera. */
 function interpretarLineas(base, lineas) {
   const comun = {};
-  ["proveedor_nombre", "proveedor", "cliente", "empresa", "sucursal", "tipo_transaccion", "estado_servicio", "estado_cliente", "direccion", "comuna", "fecha", "fuente", "moneda", "detalle", "incluye_transporte", "incluye_disposicion"].forEach(k => { if (base[k] != null && base[k] !== "" && !(Array.isArray(base[k]) && !base[k].length)) comun[k === "proveedor" ? "proveedor_nombre" : k] = base[k]; });
+  ["proveedor_nombre", "proveedor", "cliente", "empresa", "sucursal", "tipo_transaccion", "estado_servicio", "estado_cliente", "direccion", "comuna", "fecha", "fuente", "moneda", "detalle", "incluye_transporte", "incluye_disposicion",
+    "tipo_servicio", "motivo_precio", "fuente_ref", "destino", "comuna_destino", "volumen_m3", "condicion_pago_dias"].forEach(k => { if (base[k] != null && base[k] !== "" && !(Array.isArray(base[k]) && !base[k].length)) comun[k === "proveedor" ? "proveedor_nombre" : k] = base[k]; });
   // Una línea puede traer listas en "residuo", "contenedor", "comuna" y "sucursal": una tarifa por combinación.
   const expandidas = [];
   lineas.forEach(l => {
@@ -1535,9 +1669,18 @@ function interpretarLineas(base, lineas) {
     d.comuna = comunaCanonica(d.comuna); d.region = regionDeComuna(d.comuna);
     d.precio = numDe(d.precio); d.cantidad_min = numDe(d.cantidad_min); d.cantidad_max = numDe(d.cantidad_max);
     d.moneda = String(d.moneda || "CLP").toUpperCase();
-    d.incluye_transporte = siNo(d.incluye_transporte === true ? "si" : d.incluye_transporte === false ? "no" : d.incluye_transporte) || "si";
-    d.incluye_disposicion = siNo(d.incluye_disposicion === true ? "si" : d.incluye_disposicion === false ? "no" : d.incluye_disposicion) || "si";
-    if (!d.fuente) d.fuente = "cotizacion";
+    // Esquema V2: tipo de servicio (o, si solo vienen los sí/no, deducido de ellos), sin valores por defecto
+    const sn = v => siNo(v === true ? "si" : v === false ? "no" : v);
+    const conSiNo = sn(d.incluye_transporte) || sn(d.incluye_disposicion);
+    d.tipo_servicio = tipoServicioCanon(d.tipo_servicio) || (conSiNo ? tipoServicioDeSiNo({ incluye_transporte: sn(d.incluye_transporte), incluye_disposicion: sn(d.incluye_disposicion), tipo_transaccion: d.tipo_transaccion, unidad: d.unidad, detalle: d.detalle }) : "");
+    if (d.tipo_servicio === "Compra de material") d.tipo_transaccion = "paga";
+    delete d.incluye_transporte; delete d.incluye_disposicion; // el servidor los deriva del tipo
+    d.fuente = fuenteCanon(d.fuente);
+    d.motivo_precio = motivoCanon(d.motivo_precio) || tget(d, "motivo_precio");
+    if (d.comuna_destino) d.comuna_destino = comunaCanonica(d.comuna_destino);
+    d.volumen_m3 = numDe(d.volumen_m3) ?? volumenDeContenedor(d.contenedor) ?? "";
+    d.contenedor = contenedorBase(d.contenedor); // la medida queda en volumen_m3
+    d.condicion_pago_dias = numDe(d.condicion_pago_dias) ?? pagoDiasPorDefecto(d.cliente);
     return d;
   });
 }
@@ -1551,10 +1694,12 @@ function interpretarPegado() {
     const plan = planificarCarga(FORM_COLA);
     st.textContent = FORM_COLA.length + " línea(s) encontradas.";
     const sinProv = FORM_COLA.filter(d => !d.proveedor_id).length;
+    const incompletas = plan.crear.map(d => ({ d, f: faltantesMinimos(d) })).filter(x => x.f.length);
+    if (incompletas.length) st.textContent += " " + incompletas.length + " nueva(s) sin datos obligatorios: " + textoFaltantes(incompletas[0].d, incompletas[0].f) + " Pídele a Claude que los complete, o revísalas una por una.";
     prev.innerHTML = (plan.editar.length || plan.iguales.length ? '<p class="small">' + [plan.crear.length + " nuevas", plan.editar.length && plan.editar.length + " ya existen y se actualizan", plan.iguales.length && plan.iguales.length + " ya estaban iguales (se omiten)"].filter(Boolean).join(" · ") + '.</p>' : '') +
       (sinProv ?'<p class="warn small">' + sinProv + ' línea(s) con un proveedor que no encontré en ClickUp: se guardarán solo con el nombre.</p>' : '') +
       '<div class="tscroll"><table class="ttar"><tr><th>Proveedor</th><th>Empresa / sucursal</th><th>Servicio</th><th>Lugar</th><th>Precio</th><th></th></tr>' +
-      conAlerta.map(t => '<tr><td>' + esc(t.proveedor_nombre) + (t.proveedor_id ? (t._nombre_doc && claveNombre(t._nombre_doc) !== claveNombre(t.proveedor_nombre) ? '<div class="muted small">en la cotización: ' + esc(t._nombre_doc) + '</div>' : '') : ' <span class="t-alerta">no está en ClickUp</span>') + '</td><td>' + empresaHtml(t) + '</td><td>' + esc(t.residuo || "-") + '<div class="muted small">' + esc([t.contenedor, siNoTxt(t.incluye_transporte, "transp."), siNoTxt(t.incluye_disposicion, "disp.")].filter(Boolean).join(" · ")) + '</div></td><td>' + esc(t.comuna || t.direccion || "-") + '</td><td class="num">' + precioHtml(t) + '</td><td>' + alertaHtml(t) + '</td></tr>').join('') +
+      conAlerta.map(t => '<tr><td>' + esc(t.proveedor_nombre) + (t.proveedor_id ? (t._nombre_doc && claveNombre(t._nombre_doc) !== claveNombre(t.proveedor_nombre) ? '<div class="muted small">en la cotización: ' + esc(t._nombre_doc) + '</div>' : '') : ' <span class="t-alerta">no está en ClickUp</span>') + '</td><td>' + empresaHtml(t) + '</td><td>' + esc(t.residuo || "-") + '<div class="muted small">' + esc([t.tipo_servicio, contenedorTxt(t)].filter(Boolean).join(" · ")) + '</div></td><td>' + esc(t.comuna || t.direccion || "-") + '</td><td class="num">' + precioHtml(t) + '</td><td>' + alertaHtml(t) + '</td></tr>').join('') +
       '</table></div>' +
       campo("pegarPdf", "PDF de la cotización (se adjunta a todas)", '<input id="pegarPdf" type="file" accept="application/pdf">', "span2") +
       '<div class="tf-acc"><span id="pegarStatus2" class="muted small"></span>' +

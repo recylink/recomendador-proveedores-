@@ -24,15 +24,20 @@ const IMP_COLUMNAS = [
   ["precio", "Precio", "Neto (sin IVA), solo el número.", "57000"],
   ["moneda", "Moneda", "CLP o UF. Vacío = CLP.", "CLP"],
   ["unidad", "Unidad", "kg, ton, m3, viaje, retiro, servicio, mes, unidad…", "viaje"],
-  ["contenedor", "Contenedor o vehículo", "Si el precio depende de él. Varios separados por ;", "Batea 30 m3"],
-  ["incluye_transporte", "Incluye transporte", "si / no. Vacío = si.", "si"],
-  ["incluye_disposicion", "Incluye disposición", "si / no. Vacío = si.", "no"],
+  ["tipo_servicio", "Tipo de servicio", "Transporte, Disposición, Transporte + disposición, Arriendo o Compra de material. Obligatorio.", "Transporte"],
+  ["contenedor", "Contenedor o vehículo", "Tipo, sin medida (Batea, Tolva, Camión…). Obligatorio si la unidad es viaje o retiro. Varios separados por ;", "Batea"],
+  ["volumen_m3", "Volumen m3", "Volumen del contenedor en m³. Obligatorio si la unidad es viaje o retiro.", "30"],
   ["cantidad_min", "Cantidad mínima", "Tramo en que rige el precio (opcional).", ""],
   ["cantidad_max", "Cantidad máxima", "Tramo en que rige el precio (opcional).", ""],
   ["direccion", "Dirección", "Donde se retira. No hace falta si la sucursal está registrada.", ""],
-  ["comuna", "Comuna", "No hace falta si la sucursal está registrada. Varias separadas por ;", ""],
+  ["comuna", "Comuna", "Comuna de origen. No hace falta si la sucursal está registrada. Varias separadas por ;", ""],
+  ["destino", "Destino", "Planta donde termina el residuo (nombre o código RETC).", "Relleno Santa Marta"],
+  ["comuna_destino", "Comuna destino", "Opcional por ahora.", "Talagante"],
+  ["condicion_pago_dias", "Días de pago", "Condición de pago del cliente. Vacío = 120 para Euro, 30 para el resto.", "30"],
   ["fecha", "Fecha", "AAAA-MM-DD. Vacío = hoy.", "2026-10-16"],
-  ["fuente", "Fuente", "cotizacion, informal o plataforma. Vacío = cotizacion.", "cotizacion"],
+  ["fuente", "Tipo de fuente", "De la lista (hoja Listas): Contratos de clientes, Cotizaciones de proveedores, Boca a boca… Obligatorio.", "Contratos de clientes"],
+  ["fuente_ref", "Referencia", "Qué documento o conversación respalda el precio. Opcional.", "Contrato Sodimac 2026"],
+  ["motivo_precio", "Motivo del precio", "Precio de lista, Por volumen, Acuerdo marco, Promoción, Licitación, Precio de entrada, Otro o No sé. Obligatorio.", "Acuerdo marco"],
   ["detalle", "Detalle", "Condiciones: vigencia, recargos, qué incluye…", "Retiro de batea 30 m3"]
 ];
 // Otros nombres de columna que se aceptan (sin tildes, espacios ni mayúsculas)
@@ -41,7 +46,11 @@ const IMP_ALIAS = {
   TIPOTRANSACCION: "tipo_transaccion", COBRAPAGA: "tipo_transaccion", TRANSPORTE: "incluye_transporte", DISPOSICION: "incluye_disposicion",
   INCLUYEDISPOSICIONFINAL: "incluye_disposicion", DISPOSICIONFINAL: "incluye_disposicion", CONTENEDOR: "contenedor", VEHICULO: "contenedor",
   PRECIONETO: "precio", VALOR: "precio", MINIMO: "cantidad_min", MAXIMO: "cantidad_max", TIENDA: "sucursal", OBRA: "sucursal", PLANTA: "sucursal",
-  OBSERVACIONES: "detalle", CONDICIONES: "detalle", NOTAS: "detalle"
+  OBSERVACIONES: "detalle", CONDICIONES: "detalle", NOTAS: "detalle",
+  SERVICIO: "tipo_servicio", TIPOSERVICIO: "tipo_servicio", VOLUMEN: "volumen_m3", VOLUMENM3: "volumen_m3", M3CONTENEDOR: "volumen_m3",
+CONDICIONDEPAGO: "condicion_pago_dias", DIASDEPAGO: "condicion_pago_dias", PLAZODEPAGO: "condicion_pago_dias", PLANTA_DESTINO: "destino", PLANTADESTINO: "destino", COMUNADESTINO: "comuna_destino",
+  REFERENCIA: "fuente_ref", REFERENCIAFUENTE: "fuente_ref", MOTIVO: "motivo_precio", TIPOFUENTE: "fuente", FUENTE: "fuente",
+  INCLUYETRANSPORTE: "incluye_transporte", INCLUYEDISPOSICION: "incluye_disposicion" // planillas anteriores: se deduce el tipo de servicio
 };
 const IMP_LISTAS = ["residuo", "contenedor", "comuna", "sucursal"];
 
@@ -69,10 +78,11 @@ async function descargarPlantilla() {
     [], ["Reglas", "Una fila = una tarifa. Borra la fila de ejemplo antes de subir."],
     ["", "Si la tarifa ya existe (mismo proveedor, empresa, sucursal, residuo, unidad, contenedor y tipo) se actualiza; no se duplica."],
     ["", "La sucursal debe estar registrada para la empresa: la importación no crea sucursales nuevas."],
-    ["", "Un retiro y la disposición con precios distintos son dos filas: una con Incluye disposición = no y otra con Incluye transporte = no."]
+    ["", "Un retiro y la disposición con precios distintos son dos filas: una con Tipo de servicio = Transporte y otra con Disposición."],
+    ["", "Obligatorios en tarifas nuevas: proveedor, residuo, tipo de servicio, precio, unidad, tipo de fuente, motivo, comuna de origen (o la sucursal), y contenedor + volumen si se cobra por viaje o retiro."]
   ])), "Instrucciones");
-  const listas = [["Residuos", "Unidades", "Contenedores", "Estado del servicio"]];
-  const cols = [CATS.residuo || [], CATS.unidad || [], CATS.contenedor || [], CATS.estado_servicio || []];
+  const listas = [["Residuos", "Unidades", "Contenedores", "Estado del servicio", "Tipo de servicio", "Tipo de fuente", "Motivo del precio"]];
+  const cols = [CATS.residuo || [], CATS.unidad || [], contenedoresCatalogo(), CATS.estado_servicio || [], TIPOS_SERVICIO, TIPOS_FUENTE, MOTIVOS_PRECIO];
   for (let i = 0; i < Math.max(...cols.map(c => c.length)); i++) listas.push(cols.map(c => c[i] || ""));
   X.utils.book_append_sheet(wb, X.utils.aoa_to_sheet(listas), "Listas");
   X.writeFile(wb, "plantilla-tarifas-recomendador.xlsx");
@@ -149,10 +159,11 @@ function validarImportada(d) {
 function claveCarga(t) {
   const tipo = String(t.tipo || t.tipo_transaccion || "").toLowerCase() === "paga" ? "paga" : "cobra";
   const prov = tget(t, "proveedor_id") || "n:" + norm(t.proveedor_nombre);
-  return [prov, norm(t.cliente), norm(t.sucursal), t.sucursal ? "" : norm(t.comuna), norm(t.residuo), norm(t.unidad), norm(t.contenedor), tipo].join("|");
+  return [prov, norm(t.cliente), norm(t.sucursal), t.sucursal ? "" : norm(t.comuna), norm(t.residuo), norm(t.unidad), contKey(t), tipo].join("|");
 }
 
-const CAMPOS_COMPARAR = ["precio", "moneda", "fecha", "incluye_transporte", "incluye_disposicion", "cantidad_min", "cantidad_max", "estado_servicio", "detalle", "direccion", "comuna", "region", "fuente", "pdf_url"];
+const CAMPOS_COMPARAR = ["precio", "moneda", "fecha", "tipo_servicio", "cantidad_min", "cantidad_max", "estado_servicio", "detalle", "direccion", "comuna", "region", "fuente", "pdf_url",
+  "volumen_m3", "motivo_precio", "fuente_ref", "destino", "comuna_destino", "condicion_pago_dias"];
 
 /** Nuevas / se actualizan (solo campos que traen valor y cambian) / iguales, contra las tarifas activas. */
 function planificarCarga(lista) {
@@ -171,7 +182,7 @@ function planificarCarga(lista) {
       const v = d[c];
       if (v == null || v === "") return;
       const a = c === "precio" ? t.precio_num : c === "cantidad_min" ? t.cantidad_min_num : c === "cantidad_max" ? t.cantidad_max_num : tget(t, c);
-      const igual = ["precio", "cantidad_min", "cantidad_max"].includes(c) ? numDe(a) === numDe(v) : String(a ?? "").trim() === String(v).trim();
+      const igual = ["precio", "cantidad_min", "cantidad_max", "volumen_m3", "peso_lleno_kg", "condicion_pago_dias"].includes(c) ? numDe(a) === numDe(v) : String(a ?? "").trim() === String(v).trim();
       if (!igual) { cambios[c] = v; antes[c] = a; }
     });
     if (Object.keys(cambios).length) plan.editar.push({ id: t.id, cambios, antes, d });
@@ -187,6 +198,8 @@ async function guardarPlan(plan, st, pdfUrl) {
   const omitidas = plan.crear.filter(d => d._sucursal_nueva);
   if (omitidas.length && !confirm(omitidas.length + " tarifa(s) tienen una sucursal que no está registrada (" + unicosOrdenados(omitidas.map(d => d.sucursal)).join(", ") + ") y no se guardarán. ¿Continuar con el resto?")) throw new Error("Cancelado.");
   const crear = plan.crear.filter(d => !d._sucursal_nueva).map(d => Object.assign({}, d));
+  const incompleta = crear.map(d => ({ d, f: faltantesMinimos(d) })).find(x => x.f.length);
+  if (incompleta) throw new Error(textoFaltantes(incompleta.d, incompleta.f) + " Ninguna tarifa se guardó.");
   const editar = plan.editar.map(e => ({ id: e.id, cambios: Object.assign({}, e.cambios) }));
   if (pdfUrl) { crear.forEach(d => { d.pdf_url = pdfUrl; }); editar.forEach(e => { e.cambios.pdf_url = pdfUrl; }); }
   st.textContent = "Revisando catálogos…";
@@ -241,7 +254,13 @@ async function revisarImportacion(btn) {
       const e = validarImportada(d);
       if (e.length) errores.push({ d, e }); else validas.push(d);
     });
-    IMP = { plan: planificarCarga(validas), errores, archivo: f ? f.name : "" };
+    const plan = planificarCarga(validas);
+    plan.crear = plan.crear.filter(d => {
+      const fm = d._sucursal_nueva ? [] : faltantesMinimos(d); // las de sucursal nueva ya se avisan aparte
+      if (fm.length) errores.push({ d, e: ["tarifa nueva sin datos obligatorios: " + fm.map(x => x.txt).join(", ")] });
+      return !fm.length;
+    });
+    IMP = { plan, errores, archivo: f ? f.name : "" };
     st.textContent = "";
     prev.innerHTML = vistaImportacionHtml();
   } catch (e) {
@@ -262,7 +281,7 @@ function vistaImportacionHtml() {
     return '<tr><td><span class="pill imp-' + accion.toLowerCase() + '">' + accion + '</span></td>' +
       '<td>' + esc(d.proveedor_nombre) + (d.proveedor_id ? "" : ' <span class="t-alerta">no está en ClickUp</span>') + '</td>' +
       '<td>' + empresaHtml(d) + (d._sucursal_doc ? '<div class="muted small">en el archivo: ' + esc(d._sucursal_doc) + '</div>' : "") + '</td>' +
-      '<td>' + esc(d.residuo) + '<div class="muted small">' + esc([d.contenedor, siNoTxt(d.incluye_transporte, "transp."), siNoTxt(d.incluye_disposicion, "disp.")].filter(Boolean).join(" · ")) + '</div></td>' +
+      '<td>' + esc(d.residuo) + '<div class="muted small">' + esc([d.tipo_servicio, d.contenedor].filter(Boolean).join(" · ")) + '</div></td>' +
       '<td>' + esc(d.comuna || "-") + '</td><td class="num">' + precio + (otros.length ? '<div class="muted small">cambia: ' + esc(otros.join(", ")) + '</div>' : "") + '</td></tr>';
   };
   const filas = plan.editar.map(e => fila("Actualiza", e.d, e)).concat(plan.crear.map(d => fila("Nueva", d)));

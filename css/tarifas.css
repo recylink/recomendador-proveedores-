@@ -185,3 +185,30 @@ tr.abierta .t-flecha { transform:rotate(90deg); }
 .pill.imp-nueva { background:#dcfce7; color:#166534; }
 .pill.imp-actualiza { background:#dbeafe; color:#1e40af; }
 .pill.imp-error { background:#fee2e2; color:#991b1b; }
+/* Alertas: detalle al pasar el mouse y campos a completar */
+.t-alerta[data-al] { cursor:pointer; }
+.alerta-tip { position:fixed; z-index:3000; display:none; max-width:320px; background:#fff; border:1px solid #f3d28b; box-shadow:0 6px 20px rgba(16,24,40,.15); border-radius:8px; padding:8px 10px; font-size:12px; color:#344054; pointer-events:none; }
+.alerta-tip ul { margin:4px 0 6px; padding-left:16px; }
+.al-tarifa { border:1px solid #eaecf0; border-radius:8px; padding:10px 12px; margin-top:10px; }
+.al-cab { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.al-cab .cbtn { margin-top:0; white-space:nowrap; }
+.al-tarifa ul { margin:8px 0 0; padding-left:18px; }
+.al-tarifa li { margin-bottom:6px; }
+.tf-campo.campo-falta label { color:#b45309; }
+.tf-campo.campo-falta input, .tf-campo.campo-falta select, .tf-campo.campo-falta textarea, .tf-campo.campo-falta .msel { border-color:#f59e0b !important; box-shadow:0 0 0 3px #fef3c7; }
+/* Selector con "Otra…" */
+.sel-otra { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.sel-otra select, .sel-otra input { width:100%; box-sizing:border-box; }
+.nt-tab .sel-otra { min-width:100px; }
+.nt-tab .sel-otra:has(.nt-serv) { min-width:140px; }
+.nt-tab .nt-monto { min-width:90px; } .nt-tab .nt-tipo { min-width:84px; }
+.nt-tab .nt-moneda { min-width:72px; }
+.nt-tab .nt-vol { min-width:64px; } .nt-tab .sel-otra:has(.nt-cont) { min-width:120px; }
+/* Tablas de cobros con destino por residuo (anula los anchos fijos por columna de recylink.css) */
+.nt-tab td:nth-child(n) { width:auto; }
+.nt-tab .nt-vol { width:72px; min-width:72px; padding:6px; }
+.nt-dest { display:flex; flex-direction:column; gap:4px; min-width:190px; }
+.nt-dest .nt-d-com { min-height:0; }
+#nuevaTarifaModal .modalinner, #editarTarifasModal .modalinner { max-width:min(1240px, calc(100vw - 32px)); }
+#editarTarifasModal tr.et-alerta td { background:#FFFAEB; } #editarTarifasModal tr.et-alerta td:first-child { box-shadow: inset 3px 0 0 #F79009; }
+#editarTarifasModal tr.et-alerta-txt td { background:#FFFAEB; color:#93370D; font-size:12px; padding:2px 10px 10px; border-top:none; }

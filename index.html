@@ -114,10 +114,10 @@ a { color:var(--blue); }
   .print-header img { height:34px; width:auto; }
 }
 </style>
-<link rel="stylesheet" href="css/tarifas.css?v=3.31">
+<link rel="stylesheet" href="css/tarifas.css?v=3.43">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="css/recylink.css?v=3.31">
+<link rel="stylesheet" href="css/recylink.css?v=3.43">
 </head>
 <body>
 <div class="wrap">
@@ -189,6 +189,7 @@ a { color:var(--blue); }
       <button class="cbtn sec" onclick="abrirImportar()">Importar planilla</button>
       <button class="cbtn sec" onclick="abrirPegarClaude()">Pegar desde Claude</button>
       <button class="cbtn sec" onclick="abrirSucursales()">Sucursales</button>
+      <button class="cbtn sec" onclick="abrirAplicarEmpresa()" title="Días de pago para todas las sucursales de una empresa">Condición de pago de una empresa</button>
       <span id="ufInfo"></span>
     </div>
     <div class="count" id="tarCount"></div>
@@ -227,12 +228,13 @@ a { color:var(--blue); }
 </div>
 
 <!-- ?v=: subir el número al publicar cambios en estos archivos, para que el navegador no use la copia vieja -->
-<script src="js/comunas.js?v=3.31"></script>
-<script src="js/tarifas.js?v=3.31"></script>
-<script src="js/sinader.js?v=3.31"></script>
-<script src="js/nueva-tarifa.js?v=3.31"></script>
-<script src="js/editar-tarifas.js?v=3.31"></script>
-<script src="js/importar.js?v=3.31"></script>
+<script src="js/comunas.js?v=3.43"></script>
+<script src="js/esquema.js?v=3.43"></script>
+<script src="js/tarifas.js?v=3.43"></script>
+<script src="js/sinader.js?v=3.43"></script>
+<script src="js/nueva-tarifa.js?v=3.43"></script>
+<script src="js/editar-tarifas.js?v=3.43"></script>
+<script src="js/importar.js?v=3.43"></script>
 <script>
 /* ============================================================
    FUENTES DE DATOS (lectura via gviz)
@@ -388,7 +390,11 @@ async function loadMirror(){
     contactoNombre: (rows[0]||[]).findIndex(h=> hnorm(h)==="cf: nombre"),
     contactoCargo: col("Cargo laboral"),
     url: col("URL"),
-    comentarios: col("Comentarios")
+    comentarios: col("Comentarios"),
+    // Esquema V2: para la lista de destinos (plantas) de una tarifa
+    actor: col("Actor"),
+    categoria: col("Categoria de servicios"),
+    destinos: col("Destinos concurridos")
   };
   const get=(r,i)=> (i>=0 && r[i]!=null) ? String(r[i]).trim() : "";
   const splitMulti = v => (v||"").split(/[,;]+/).map(x=>x.trim()).filter(Boolean);
@@ -414,6 +420,8 @@ async function loadMirror(){
     const correo=get(r,ci.correo), telefono=get(r,ci.telefono), web=get(r,ci.web), rut=get(r,ci.rut);
     const contactoNombre=get(r,ci.contactoNombre), contactoCargo=/^x+$/i.test(get(r,ci.contactoCargo)) ? "" : get(r,ci.contactoCargo);
     const comentarios = get(r,ci.comentarios);
+    const actor = get(r,ci.actor), categoria = get(r,ci.categoria);
+    let destinos = []; try { destinos = JSON.parse(get(r,ci.destinos) || "[]").map(d=>({ id:d.id, name:String(d.name||"").trim() })).filter(d=>d.name); } catch(e) {}
     const id = get(r,ci.id) || ("row-"+i);
     const url = get(r,ci.url);
     const ubicAll=[...areas, ubicTxt, direccion, cobertura].filter(Boolean).join(" - ");
@@ -421,7 +429,7 @@ async function loadMirror(){
     const s = {
       id, name, url, estado,
       residuos, residuosCU: residuos.slice(), residuoTxt, areas, ubicTxt, direccion, cobertura, ubicAll, residuosAll,
-      estrellas, puntaje:pPje, situacion, movimiento, correo, telefono, web, rut, contactoNombre, contactoCargo, comentarios,
+      estrellas, puntaje:pPje, situacion, movimiento, correo, telefono, web, rut, contactoNombre, contactoCargo, comentarios, actor, categoria, destinos,
       clientes: [],
       score:0, sheetOnly:false
     };
