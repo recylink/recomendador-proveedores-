@@ -1486,28 +1486,50 @@ function parsearBloqueClaude(txt) {
   if (desde === -1) throw new Error("No encontré datos en el texto pegado.");
   const fin = Math.max(s.lastIndexOf("}"), s.lastIndexOf("]"));
   const j = JSON.parse(s.slice(desde, fin + 1));
-  const base = Array.isArray(j) ? {} : j;
-  const lineas = Array.isArray(j) ? j : (j.tarifas || []);
-  if (!lineas.length) throw new Error("El bloque no trae tarifas.");
+  // Un bloque, una lista de líneas o una lista de bloques (uno por proveedor u hoja)
+  const bloques = Array.isArray(j) && j.length && j[0] && Array.isArray(j[0].tarifas) ? j : [j];
+  const out = [].concat(...bloques.map(b => interpretarLineas(Array.isArray(b) ? {} : b, Array.isArray(b) ? b : (b.tarifas || []))));
+  if (!out.length) throw new Error("El bloque no trae tarifas.");
+  return out;
+}
+
+/** Sucursal registrada de la empresa: exacta o la única que contiene al otro nombre ("Lenga" / "Planta Lenga"). */
+function sucursalRegistrada(empresa, nombre) {
+  const k = norm(nombre); if (!k) return "";
+  const lista = sucursalesDe(empresa);
+  const exacta = lista.find(s => norm(s) === k);
+  if (exacta) return exacta;
+  const parecidas = k.length >= 4 ? lista.filter(s => norm(s).indexOf(k) !== -1 || k.indexOf(norm(s)) !== -1) : [];
+  return parecidas.length === 1 ? parecidas[0] : "";
+}
+
+/** Líneas de tarifa (de Claude o de una planilla) → tarifas listas para guardar, con los datos comunes de la cabecera. */
+function interpretarLineas(base, lineas) {
   const comun = {};
-  ["proveedor_nombre", "proveedor", "cliente", "empresa", "sucursal", "tipo_transaccion", "estado_servicio", "estado_cliente", "direccion", "comuna", "fecha", "fuente", "moneda", "detalle", "incluye_transporte", "incluye_disposicion"].forEach(k => { if (base[k] != null && base[k] !== "") comun[k === "proveedor" ? "proveedor_nombre" : k] = base[k]; });
-  // Una línea puede traer listas en "residuo", "contenedor" y "comuna": una tarifa por combinación.
+  ["proveedor_nombre", "proveedor", "cliente", "empresa", "sucursal", "tipo_transaccion", "estado_servicio", "estado_cliente", "direccion", "comuna", "fecha", "fuente", "moneda", "detalle", "incluye_transporte", "incluye_disposicion"].forEach(k => { if (base[k] != null && base[k] !== "" && !(Array.isArray(base[k]) && !base[k].length)) comun[k === "proveedor" ? "proveedor_nombre" : k] = base[k]; });
+  // Una línea puede traer listas en "residuo", "contenedor", "comuna" y "sucursal": una tarifa por combinación.
   const expandidas = [];
   lineas.forEach(l => {
     const res = [].concat(l.residuo == null ? "" : l.residuo);
     const com = [].concat(l.comuna == null || l.comuna === "" ? (comun.comuna || "") : l.comuna);
     const con = [].concat(l.contenedor == null ? "" : l.contenedor);
-    res.forEach(r => con.forEach(co => com.forEach(c => expandidas.push(Object.assign({}, l, { residuo: r, contenedor: co, comuna: c })))));
+    const suc = [].concat(l.sucursal == null ? (comun.sucursal || "") : l.sucursal);
+    res.forEach(r => con.forEach(co => com.forEach(c => suc.forEach(su => expandidas.push(Object.assign({}, l, { residuo: r, contenedor: co, comuna: c, sucursal: su }))))));
   });
   return expandidas.map(l => {
     const d = Object.assign({}, comun, l);
-    if (d.proveedor && !d.proveedor_nombre) d.proveedor_nombre = d.proveedor; delete d.proveedor;
-    if (d.empresa && !d.cliente) d.cliente = d.empresa; delete d.empresa;
+    if (l.proveedor || (d.proveedor && !d.proveedor_nombre)) d.proveedor_nombre = d.proveedor; delete d.proveedor; // el de la línea manda
+    if (l.empresa || (d.empresa && !d.cliente)) d.cliente = d.empresa; delete d.empresa;
     if (d.cliente) d.cliente = empresaCanonica(d.cliente);
     d.tipo_transaccion = String(d.tipo_transaccion || "cobra").toLowerCase() === "paga" ? "paga" : "cobra";
     if (base.detalle && l.detalle && l.detalle !== base.detalle) d.detalle = l.detalle + "\n" + base.detalle;
     const sup = buscarProveedorClickUp(d.proveedor_nombre);
     if (sup) { d._nombre_doc = d.proveedor_nombre; d.proveedor_id = sup.id; d.proveedor_nombre = sup.name; }
+    if (d.sucursal && d.cliente) {
+      const reg = sucursalRegistrada(d.cliente, d.sucursal);
+      if (reg && reg !== d.sucursal) { d._sucursal_doc = d.sucursal; d.sucursal = reg; }
+      if (!reg) d._sucursal_nueva = true;
+    }
     if (d.sucursal && !d.direccion && !d.comuna) { const si = sucursalInfo(d.cliente, d.sucursal); if (si) { d.direccion = si.direccion; d.comuna = si.comuna; } }
     if (!d.comuna && d.direccion) d.comuna = detectarComuna(d.direccion);
     d.comuna = comunaCanonica(d.comuna); d.region = regionDeComuna(d.comuna);
@@ -1526,9 +1548,11 @@ function interpretarPegado() {
     FORM_COLA = parsearBloqueClaude(document.getElementById("pegarTxt").value);
     const conAlerta = FORM_COLA.map(d => prepararTarifa(Object.assign({ id: "nuevo", activo: "si" }, d, { precio: d.precio })));
     const tmp = TARIFAS; TARIFAS = tmp.concat(conAlerta); calcularAlertas(); TARIFAS = tmp; calcularAlertas();
+    const plan = planificarCarga(FORM_COLA);
     st.textContent = FORM_COLA.length + " línea(s) encontradas.";
     const sinProv = FORM_COLA.filter(d => !d.proveedor_id).length;
-    prev.innerHTML = (sinProv ? '<p class="warn small">' + sinProv + ' línea(s) con un proveedor que no encontré en ClickUp: se guardarán solo con el nombre.</p>' : '') +
+    prev.innerHTML = (plan.editar.length || plan.iguales.length ? '<p class="small">' + [plan.crear.length + " nuevas", plan.editar.length && plan.editar.length + " ya existen y se actualizan", plan.iguales.length && plan.iguales.length + " ya estaban iguales (se omiten)"].filter(Boolean).join(" · ") + '.</p>' : '') +
+      (sinProv ?'<p class="warn small">' + sinProv + ' línea(s) con un proveedor que no encontré en ClickUp: se guardarán solo con el nombre.</p>' : '') +
       '<div class="tscroll"><table class="ttar"><tr><th>Proveedor</th><th>Empresa / sucursal</th><th>Servicio</th><th>Lugar</th><th>Precio</th><th></th></tr>' +
       conAlerta.map(t => '<tr><td>' + esc(t.proveedor_nombre) + (t.proveedor_id ? (t._nombre_doc && claveNombre(t._nombre_doc) !== claveNombre(t.proveedor_nombre) ? '<div class="muted small">en la cotización: ' + esc(t._nombre_doc) + '</div>' : '') : ' <span class="t-alerta">no está en ClickUp</span>') + '</td><td>' + empresaHtml(t) + '</td><td>' + esc(t.residuo || "-") + '<div class="muted small">' + esc([t.contenedor, siNoTxt(t.incluye_transporte, "transp."), siNoTxt(t.incluye_disposicion, "disp.")].filter(Boolean).join(" · ")) + '</div></td><td>' + esc(t.comuna || t.direccion || "-") + '</td><td class="num">' + precioHtml(t) + '</td><td>' + alertaHtml(t) + '</td></tr>').join('') +
       '</table></div>' +
@@ -1548,11 +1572,9 @@ async function guardarLoteClaude(btn) {
     if (!sesionActiva()) await iniciarSesion();
     st.textContent = "Guardando…";
     const url = await subirPdfSiHay("pegarPdf");
-    for (const d of FORM_COLA) { await asegurarCatalogos(d); if (url) d.pdf_url = url; }
-    const r = await api("tarifa_crear_lote", { tarifas: FORM_COLA }, true);
-    st.textContent = r.ids.length + " tarifa(s) guardadas.";
+    const r = await guardarPlan(planificarCarga(FORM_COLA), st, url); // las que ya existen se actualizan
+    st.textContent = r.creadas + " nueva(s) y " + r.editadas + " actualizada(s).";
     FORM_COLA = null;
-    await refrescarTrasGuardar(r.tarifas);
     setTimeout(() => cerrarModal("pegarModal"), 700);
   } catch (e) { st.textContent = "Error: " + e.message; if (btn) btn.disabled = false; }
 }

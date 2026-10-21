@@ -177,3 +177,11 @@ tr.abierta .t-flecha { transform:rotate(90deg); }
 .ct-editar:hover { background:#eef6fb; }
 .sin-acc { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
 .sin-acc .cbtn { margin-top:0; }
+/* Importar planilla */
+.imp-pasos { padding-left:18px; margin:6px 0 10px; }
+.imp-pasos li { margin-bottom:4px; }
+.imp-resumen { display:flex; gap:6px; flex-wrap:wrap; margin:12px 0 8px; }
+.imp-resumen .pill { font-size:12px; padding:3px 9px; }
+.pill.imp-nueva { background:#dcfce7; color:#166534; }
+.pill.imp-actualiza { background:#dbeafe; color:#1e40af; }
+.pill.imp-error { background:#fee2e2; color:#991b1b; }
