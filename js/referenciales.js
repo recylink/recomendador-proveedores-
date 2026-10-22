@@ -107,6 +107,13 @@ function costosM3(ts) {
       if (op == null) return;
       // si además viene el costo por m³ informado, se usa solo como referencia (no se suma)
       if (tdM3 && !usadas.includes(tdM3)) usadas.push(tdM3);
+      // peoneta, faena, hidrojet: se cobran aparte en cada viaje, así que se suman al retiro
+      if (c.vol) g.filter(t => SERVICIOS_POR_VIAJE.includes(t.tipo_servicio) && ["servicio", "viaje", "retiro"].includes(String(t.unidad || "").toLowerCase()) && mismo(t) && clpDe(t) != null)
+        .forEach(t => {
+          const v = clpDe(t);
+          op += v / c.vol; usadas.push(t);
+          lineas.push({ comp: t.tipo_servicio + " (por viaje)", tarifa: precioCorto(t), porCont: v, porM3: v / c.vol, porViaje: true });
+        });
       let conArr = null;
       if (ar && c.vol) {
         const a = clpDe(ar) / RETIROS_MES;
@@ -272,6 +279,9 @@ function porContenedor(l) {
       retiro: comp("Retiro (transporte)", "Retiro con disposición", "Costo por m³ informado"),
       retiroConDisp: x.some(i => i.lineas.some(y => y.comp === "Retiro con disposición" || y.comp === "Costo por m³ informado")),
       retiroCalc: x.some(i => i.lineas.some(y => y.comp === "Costo por m³ informado")),
+      // servicios por viaje cobrados aparte (suma por sucursal, mediana entre sucursales)
+      porViaje: (v => v.length ? mediana(v) : null)(x.map(i => i.lineas.filter(y => y.porViaje)).filter(l => l.length).map(l => l.reduce((s, y) => s + y.porCont, 0))),
+      porViajeTxt: unicosOrdenados(x.flatMap(i => i.lineas.filter(y => y.porViaje).map(y => y.comp.replace(" (por viaje)", "").toLowerCase()))).join(", "),
       disp: disp.length ? mediana(disp.map(clpDe)) : null, dispUnidad: disp.length ? disp[0].unidad : "", arriendo: arr.length ? mediana(arr) : null,
       compra: (cs => cs.length ? { valor: mediana(cs.map(c => c.valor)), unidad: cs[0].unidad } : null)(x.map(i => i.compra).filter(Boolean)) };
   }).sort((a, b) => b.vol - a.vol || a.cont.localeCompare(b.cont, "es"));
@@ -500,7 +510,8 @@ function renderComparar() {
         '<th class="num">Retiro</th><th class="num">Disposición</th><th class="num">Arriendo / mes</th><th class="num">Sucursales</th></tr>' +
         provs.flatMap(p => p.porCont.map((c, j) => '<tr' + (j ? ' class="cmp-sub"' : '') + '><td>' + (j ? '' : cmpNombreHtml(p.nombre, p.provKey)) + '</td><td>' + esc(c.cont || "—") + '</td><td class="num">' + (c.vol ? fmtNum(c.vol, 2) : "—") + '</td>' +
           '<td class="num"><b>' + fmtCLP(c.op) + '</b></td><td class="num">' + (c.min === c.max ? fmtCLP(c.min) : fmtCLP(c.min) + ' – ' + fmtCLP(c.max)) + '</td>' +
-          '<td class="num">' + (c.retiro != null ? fmtCLP(c.retiro) + (c.retiroConDisp ? '<div class="muted small">transporte + disposición' + (c.retiroCalc ? ' · ' + fmtNum(c.vol, 2) + ' m³ × costo por m³' : '') + '</div>' : '') : "—") + '</td>' +
+          '<td class="num">' + (c.retiro != null ? fmtCLP(c.retiro) + (c.retiroConDisp ? '<div class="muted small">transporte + disposición' + (c.retiroCalc ? ' · ' + fmtNum(c.vol, 2) + ' m³ × costo por m³' : '') + '</div>' : '') : "—") +
+            (c.porViaje != null ? '<div class="muted small">+ ' + fmtCLP(c.porViaje) + ' ' + esc(c.porViajeTxt) + ' por viaje</div>' : '') + '</td>' +
           '<td class="num">' + (c.disp != null ? fmtCLP(c.disp) + (c.dispUnidad ? ' <span class="muted small">/ ' + esc(c.dispUnidad) + '</span>' : '') : c.retiroConDisp ? '<span class="muted small">incluida en el retiro</span>' : (c.compra ? '' : "—")) +
             (c.compra ? '<div class="paga-txt">+' + fmtCLP(c.compra.valor) + ' / ' + esc(c.compra.unidad) + ' <span class="small">paga el proveedor</span></div>' : '') + '</td>' +
           '<td class="num">' + (c.arriendo != null ? fmtCLP(c.arriendo) : "—") + '</td><td class="num">' + c.n + '</td></tr>')
@@ -512,5 +523,5 @@ function renderComparar() {
           '<td class="num">—</td><td class="num">' + c.n + '</td></tr>' +
           (CMP_ABIERTOS.has(c.provKey) ? '<tr class="cmp-det-fila"><td colspan="9">' + cmpDetalleHtml({ provKey: c.provKey, nombre: c.nombre, residuo: CMP.residuo, region: CMP.region, items: null, tarifas: c.tarifas, servicio: "Compra de material" }) + '</td></tr>' : '')).join('') +
       '</table></div>' +
-      '<div class="muted small">Cada proveedor se calcula por separado (nunca se mezcla el retiro de uno con la disposición de otro): la barra es la mediana de todas sus sucursales en la región; la tabla separa cada contenedor, con el rango entre sus sucursales. Los contenedores chicos cuestan más por m³. El arriendo se prorratea con ' + RETIROS_MES + ' retiros al mes. Disposición por kg llevada a m³ con la densidad del residuo' + (densidadDe(CMP.residuo) ? ' (' + fmtNum(densidadDe(CMP.residuo).kgm3, 0) + ' kg/m³)' : '') + '.</div></div>');
+      '<div class="muted small">Cada proveedor se calcula por separado (nunca se mezcla el retiro de uno con la disposición de otro): la barra es la mediana de todas sus sucursales en la región; la tabla separa cada contenedor, con el rango entre sus sucursales. Los contenedores chicos cuestan más por m³. Peoneta, servicio de faena e hidrojet se cobran por viaje y se suman al retiro. El arriendo se prorratea con ' + RETIROS_MES + ' retiros al mes. Disposición por kg llevada a m³ con la densidad del residuo' + (densidadDe(CMP.residuo) ? ' (' + fmtNum(densidadDe(CMP.residuo).kgm3, 0) + ' kg/m³)' : '') + '.</div></div>');
 }
