@@ -358,8 +358,6 @@ function calcularAlertas() {
   if (typeof _MERCADO !== "undefined") _MERCADO = null; // el precio de mercado se recalcula con las tarifas nuevas
   const activas = TARIFAS.filter(t => t.activo);
   marcarVigentes(activas);
-  const grupos = {};
-  activas.filter(t => t.vigente).forEach(t => { (grupos[grupoKey(t)] = grupos[grupoKey(t)] || []).push(t); });
   TARIFAS.forEach(t => {
     // Cada alerta dice qué campos del formulario hay que completar o revisar
     const a = [];
@@ -368,12 +366,7 @@ function calcularAlertas() {
     else if (t.precio_num <= 1 && !String(tget(t, "detalle") || "").trim()) al("Precio de " + (t.moneda === "UF" ? t.precio_num + " UF" : fmtCLP(t.precio_num)) + ": posible valor de relleno", ["f_precio", "f_detalle"], "Revisa el monto. Si es correcto, explícalo en el Detalle.");
     if (!tget(t, "unidad")) al("Falta la unidad", ["f_unidad"], "Indica por qué se cobra: kg, ton, m3, viaje, retiro, mes…");
     if (!esGeneral(t) && !tget(t, "direccion") && !tget(t, "comuna")) al("Falta la dirección o comuna", ["f_direccion", "f_comunas"], "Indica dónde se retira el residuo (dirección o al menos la comuna).");
-    const pares = (grupos[grupoKey(t)] || []).filter(x => x !== t).map(clpDe).filter(v => v != null);
-    const v = clpDe(t);
-    if (pares.length >= 2 && v != null && v > 1) {
-      const m = mediana(pares);
-      if (m && Math.abs(v - m) / m > 0.5) al("Precio " + (v > m ? "más de 50% sobre" : "más de 50% bajo") + " la mediana de comparables (" + fmtCLP(m) + ")", ["f_precio", "f_unidad", "f_detalle"], "Confirma el monto y la unidad. Si son correctos, explica en el Detalle por qué difiere.");
-    }
+    // Sin alerta por precio sobre o bajo la mediana (decisión 2026-10-21): la comparación está en "Comparar por región"
     // Esquema V2: campos obligatorios que le faltan (las cargadas antes de V2 los tienen pendientes)
     if (t.activo) {
       const f = faltantesMinimos(t).filter(x => !["monto", "unidad"].includes(x.txt)); // esos ya tienen su propia alerta
