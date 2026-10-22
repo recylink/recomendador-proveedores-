@@ -255,13 +255,7 @@ function referencialRegionHtml(ts, opts) {
 
 /* ---------------- comparar proveedores en una región ---------------- */
 let CMP = { provs: [], modo: "m3", residuo: "", region: "", tipos: [], vols: [], arriendo: false, servicio: "", unidad: "" }; // tipos/vols vacío = todos
-function abrirComparar(on) {
-  document.getElementById("tarList").style.display = on ? "none" : "";
-  document.getElementById("tarCount").style.display = on ? "none" : "";
-  document.getElementById("tarComparar").style.display = on ? "" : "none";
-  document.querySelectorAll(".tar-vista button").forEach(b => b.classList.toggle("on", (b.dataset.v === "cmp") === on));
-  if (on) renderComparar();
-}
+function abrirComparar(on) { abrirVistaTar(on ? "cmp" : "lista"); } // la vista Historial de precios está en js/historial.js
 /** Suma o quita un contenedor de la comparación (ninguno elegido = todos). */
 function cmpCont(campo, c) { CMP[campo] = CMP[campo].includes(c) ? CMP[campo].filter(x => x !== c) : CMP[campo].concat([c]); renderComparar(); }
 /** Por contenedor (tipo + m³) de un proveedor: medianas de sus sucursales, de mayor a menor volumen. */
@@ -333,6 +327,63 @@ function modoCmpHtml() {
     '<button type="button" class="' + (CMP.modo === "unidad" ? "on" : "") + '" onclick="CMP.modo=\'unidad\';renderComparar()">Precio por unidad</button></div></div>';
 }
 
+/* ---------------- detalle de un proveedor (clic en su nombre) ---------------- */
+const CMP_ABIERTOS = new Set(); // provKey con el detalle desplegado; se mantiene al cambiar filtros
+function cmpToggle(k, irA) {
+  CMP_ABIERTOS.has(k) ? CMP_ABIERTOS.delete(k) : CMP_ABIERTOS.add(k);
+  renderComparar();
+  if (irA && CMP_ABIERTOS.has(k)) { const el = document.querySelector('[data-cmp-det="' + CSS.escape(k) + '"]'); if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+}
+/** Nombre del proveedor como botón que despliega su detalle (desde la barra baja hasta el detalle en la tabla). */
+function cmpNombreHtml(nombre, k, irA) {
+  const ab = CMP_ABIERTOS.has(k);
+  return '<button type="button" class="cmp-prov" aria-expanded="' + ab + '" onclick="cmpToggle(' + esc(JSON.stringify(k)) + ',' + !!irA + ')"><b>' + esc(nombre) + '</b> <span class="cmp-flecha">' + (ab ? "▾" : "▸") + '</span></button>';
+}
+/** Abre el Historial de precios con este proveedor, residuo y servicio. */
+function cmpVerHistorial(o) {
+  Object.assign(HIS, { residuo: o.residuo, servicio: o.servicio || "", unidad: o.unidad || "", region: o.region || "", prov: o.prov });
+  abrirVistaTar("his");
+}
+function cmpTarifasTabla(ts) {
+  return '<div class="tscroll"><table class="ttar cmp-det-tab"><tr><th>Empresa · sucursal</th><th>Servicio · contenedor</th><th class="num">Precio</th><th>Fecha</th><th>Fuente · motivo</th><th>Destino</th></tr>' +
+    ts.slice().sort((a, b) => String(a.cliente + a.sucursal).localeCompare(String(b.cliente + b.sucursal), "es") || String(a.tipo_servicio).localeCompare(String(b.tipo_servicio), "es")).map(t =>
+      '<tr><td>' + (esGeneral(t) ? '<span class="muted">Valor general</span>' : esc([t.cliente, t.sucursal].filter(Boolean).join(" · ") || "-")) + '<div class="muted small">' + esc(t.comuna || "") + '</div></td>' +
+      '<td>' + esc(t.tipo_servicio || "-") + '<div class="muted small">' + esc(contenedorTxt(t) || "") + '</div></td>' +
+      '<td class="num">' + precioHtml(t) + '</td><td class="small">' + esc(t.fecha || "-") + '</td>' +
+      '<td class="small">' + esc([t.fuente, tget(t, "fuente_ref")].filter(Boolean).join(" · ") || "-") + (tget(t, "motivo_precio") ? '<div class="muted small">' + esc(t.motivo_precio) + '</div>' : '') +
+        (t.pdf_url ? '<a href="' + esc(t.pdf_url) + '" target="_blank" rel="noopener">PDF ↗</a>' : '') + '</td>' +
+      '<td class="small">' + esc(tget(t, "destino") || "—") + '</td></tr>' +
+      (t.detalle ? '<tr class="cmp-det-txt"><td colspan="6">' + esc(t.detalle).replace(/\n/g, '<br>') + '</td></tr>' : '')).join('') +
+    '</table></div>';
+}
+/**
+ * Detalle desplegable: contacto, costo por sucursal con su desglose (costo por m³), las tarifas que entran al número
+ * y los otros cobros del proveedor para el mismo residuo en la región (peoneta, faena, arriendo…).
+ * o: { provKey, nombre, residuo, region, items (costo por m³) | null, tarifas, servicio, unidad }
+ */
+function cmpDetalleHtml(o) {
+  const usadas = new Set(o.tarifas.map(t => t.id));
+  const otras = TARIFAS.filter(t => t.provKey === o.provKey && t.activo && t.vigente && t.residuo === o.residuo && !usadas.has(t.id) &&
+    (t.region || regionDeComuna(t.comuna) || "") === o.region);
+  const sucs = o.items ? o.items.slice().sort((a, b) => a.op - b.op).map(it => {
+    const id = "desg" + (++_DESG_SEQ);
+    return '<tr><td><b>' + esc([it.cliente, it.sucursal].filter(Boolean).join(" · ") || "-") + '</b></td><td>' + esc(it.cont + " " + fmtNum(it.vol, 2) + " m³") + '</td>' +
+      '<td class="num"><b>' + fmtCLP(it.op) + '</b></td><td class="num">' + (it.conArr != null ? fmtCLP(it.conArr) : "—") + '</td>' +
+      '<td class="num">' + (it.pago ? esc(it.pago) + " días" : "—") + '</td>' +
+      '<td><button type="button" class="lnk small" data-txt="Ver desglose" onclick="verDesglose(\'' + id + '\',this)">Ver desglose</button></td></tr>' +
+      '<tr id="' + id + '" style="display:none" class="desg-fila"><td colspan="6">' + desgloseHtml(it) + '</td></tr>';
+  }).join('') : '';
+  const his = esc(JSON.stringify({ prov: o.nombre, residuo: o.residuo, region: o.region, servicio: o.servicio || "", unidad: o.unidad || "" }));
+  return '<div class="cmp-detalle" data-cmp-det="' + esc(o.provKey) + '">' +
+    '<div class="cmp-det-cab">' + contactoCortoTarifa(o.tarifas[0]) + '<div class="cmp-det-acc">' +
+      '<button type="button" class="lnk" onclick="cmpVerHistorial(' + his + ')">Historial de precios</button>' +
+      (typeof abrirEditarTarifas === "function" ? '<button type="button" class="lnk" onclick="abrirEditarTarifas(' + esc(JSON.stringify(o.nombre)) + ')">Editar tarifas</button>' : '') + '</div></div>' +
+    (o.items ? '<div class="t-etq">Costo por sucursal (' + o.items.length + ')</div><div class="tscroll"><table class="ttar cmp-det-tab"><tr><th>Empresa · sucursal</th><th>Contenedor</th><th class="num">Operativo / m³</th><th class="num">Con arriendo / m³</th><th class="num">Pago</th><th></th></tr>' + sucs + '</table></div>' : '') +
+    '<div class="t-etq">' + (o.items ? "Tarifas que entran al cálculo" : "Tarifas") + ' (' + o.tarifas.length + ')</div>' + cmpTarifasTabla(o.tarifas) +
+    (otras.length ? '<div class="t-etq">Otros cobros para ' + esc(o.residuo) + ' en ' + esc(o.region) + ' (' + otras.length + ')</div>' + cmpTarifasTabla(otras) : '') +
+    '</div>';
+}
+
 /* Precio por unidad: residuo × tipo de servicio × unidad × región, una mediana por proveedor.
    En compra de material el proveedor paga: el mejor es quien paga más. */
 function renderCompararUnidad(box) {
@@ -354,7 +405,7 @@ function renderCompararUnidad(box) {
   del.filter(t => (t.tipo === "paga") === paga).forEach(t => (porProv[t.provKey] = porProv[t.provKey] || []).push(t));
   let provs = Object.values(porProv).map(l => {
     const gen = l.filter(esGeneral), base = gen.length ? gen : l, vals = base.map(clpDe);
-    return { nombre: l[0].proveedor_nombre, n: l.length, v: mediana(vals), min: Math.min(...vals), max: Math.max(...vals), fijada: !!gen.length,
+    return { nombre: l[0].proveedor_nombre, provKey: l[0].provKey, tarifas: l, n: l.length, v: mediana(vals), min: Math.min(...vals), max: Math.max(...vals), fijada: !!gen.length,
       empresas: unicosOrdenados(l.map(t => t.cliente).filter(Boolean)).join(", "), conf: confianzaDe(base),
       fuente: unicosOrdenados(l.map(t => t.fuente).filter(Boolean)).join(", ") + (unicosOrdenados(l.map(t => tget(t, "motivo_precio")).filter(Boolean)).length ? " · " + unicosOrdenados(l.map(t => tget(t, "motivo_precio")).filter(Boolean)).join(", ").toLowerCase() : "") };
   }).sort((a, b) => paga ? b.v - a.v : a.v - b.v);
@@ -376,14 +427,15 @@ function renderCompararUnidad(box) {
       (unidades.length > 1 ? '<div class="muted small">Solo se comparan precios en la misma unidad. Este servicio también tiene tarifas por ' + esc(unidades.filter(u => u !== CMP.unidad).map(u => u + " (" + provPorUni[u].size + ")").join(", ")) + ': cámbialo en Unidad.</div>' : '') +
       provs.map((p, i) => {
         const dif = merc ? (p.v - merc) / merc : 0, bueno = paga ? dif > 0 : dif < 0;
-        return '<div class="cmp-fila"><div><b>' + esc(p.nombre) + '</b><div class="muted small">' + p.n + ' tarifa' + (p.n > 1 ? 's' : '') + (p.fijada ? ' · fijada' : '') + ' · ' + esc(p.conf.txt.toLowerCase()) + '</div></div>' +
+        return '<div class="cmp-fila"><div>' + cmpNombreHtml(p.nombre, p.provKey, true) + '<div class="muted small">' + p.n + ' tarifa' + (p.n > 1 ? 's' : '') + (p.fijada ? ' · fijada' : '') + ' · ' + esc(p.conf.txt.toLowerCase()) + '</div></div>' +
           '<div class="cmp-barra"><div class="cmp-val' + (i === 0 ? ' mejor' : '') + '" style="width:' + pct(p.v) + '"></div><div class="cmp-merc" style="left:' + pct(merc) + '" title="Precio de mercado"></div></div>' +
           '<div class="num"><b>' + fmtCLP(p.v) + '</b><span class="muted small">' + esc(u) + '</span><div class="small ' + (Math.abs(dif) < 0.005 ? "muted" : bueno ? "ok-msg" : "warn") + '">' + (Math.abs(dif) < 0.005 ? "igual al mercado" : Math.round(Math.abs(dif) * 100) + "% " + (dif < 0 ? "bajo" : "sobre") + " mercado") + '</div></div></div>';
       }).join('') +
       '<div class="cmp-fila cmp-eje"><div></div><div class="muted small">│ línea = precio de mercado</div><div></div></div>' +
       '<div class="tscroll"><table class="ttar"><tr><th>Proveedor</th><th class="num">Mediana' + esc(u) + '</th><th class="num">Mín – máx</th><th class="num">Tarifas</th><th>Empresas</th><th>Fuente · motivo</th></tr>' +
-        provs.map(p => '<tr><td><b>' + esc(p.nombre) + '</b></td><td class="num"><b>' + fmtCLP(p.v) + '</b></td><td class="num">' + (p.min === p.max ? fmtCLP(p.min) : fmtCLP(p.min) + ' – ' + fmtCLP(p.max)) + '</td><td class="num">' + p.n + '</td>' +
-          '<td class="small">' + esc(p.empresas || "Valor general") + '</td><td class="small">' + esc(p.fuente) + '</td></tr>').join('') +
+        provs.map(p => '<tr><td>' + cmpNombreHtml(p.nombre, p.provKey) + '</td><td class="num"><b>' + fmtCLP(p.v) + '</b></td><td class="num">' + (p.min === p.max ? fmtCLP(p.min) : fmtCLP(p.min) + ' – ' + fmtCLP(p.max)) + '</td><td class="num">' + p.n + '</td>' +
+          '<td class="small">' + esc(p.empresas || "Valor general") + '</td><td class="small">' + esc(p.fuente) + '</td></tr>' +
+          (CMP_ABIERTOS.has(p.provKey) ? '<tr class="cmp-det-fila"><td colspan="6">' + cmpDetalleHtml({ provKey: p.provKey, nombre: p.nombre, residuo: CMP.residuo, region: CMP.region, items: null, tarifas: p.tarifas, servicio: CMP.servicio, unidad: CMP.unidad }) + '</td></tr>' : '')).join('') +
       '</table></div>' +
       '<div class="muted small">Mediana de las tarifas vigentes de cada proveedor en la región (si tiene una referencial fijada, manda esa). Precios en UF llevados a pesos con la UF del día.</div></div>');
 }
@@ -412,7 +464,7 @@ function renderComparar() {
     const comp = nombre => mediana(l.flatMap(i => i.lineas.filter(x => x.comp === nombre).map(x => x.porCont)).filter(v => v != null));
     const arr = l.flatMap(i => i.tarifas.filter(t => esServ(t, "Arriendo"))).map(clpDe).filter(v => v != null);
     const ts = l.flatMap(i => i.tarifas);
-    return { nombre: l[0].proveedor, n: l.length, v: vs.length ? mediana(vs) : null, op: mediana(l.map(i => i.op)), conArr: mediana(l.map(i => i.conArr).filter(v => v != null)),
+    return { nombre: l[0].proveedor, provKey: l[0].provKey, items: l, tarifas: ts, n: l.length, v: vs.length ? mediana(vs) : null, op: mediana(l.map(i => i.op)), conArr: mediana(l.map(i => i.conArr).filter(v => v != null)),
       retiro: comp("Retiro (transporte)"), disp: mediana(l.flatMap(i => i.tarifas.filter(t => esServ(t, "Disposición")).map(clpDe))), arriendo: arr.length ? mediana(arr) : null,
       porCont: porContenedor(l), tipos: unicosOrdenados(l.map(i => i.cont)).join(", "), vols: [...new Set(l.map(i => i.vol))].sort((a, b) => a - b).map(v => fmtNum(v, 2)).join(", "), conf: confianzaDe(ts),
       fuente: unicosOrdenados(ts.map(t => t.fuente).filter(Boolean)).join(", ") + (unicosOrdenados(ts.map(t => tget(t, "motivo_precio")).filter(Boolean)).length ? " · " + unicosOrdenados(ts.map(t => tget(t, "motivo_precio")).filter(Boolean)).join(", ").toLowerCase() : "") };
@@ -424,7 +476,7 @@ function renderComparar() {
     .forEach(t => (porComp[t.provKey] = porComp[t.provKey] || []).push(t));
   const compradores = Object.values(porComp).map(l => {
     const kg = l.filter(t => unidadEs(t, "kg")), base = kg.length ? kg : l, vals = base.map(clpDe);
-    return { nombre: l[0].proveedor_nombre, valor: mediana(vals), min: Math.min(...vals), max: Math.max(...vals), unidad: base[0].unidad,
+    return { nombre: l[0].proveedor_nombre, provKey: l[0].provKey, tarifas: l, valor: mediana(vals), min: Math.min(...vals), max: Math.max(...vals), unidad: base[0].unidad,
       n: new Set(l.map(t => norm(t.cliente) + "|" + norm(t.sucursal || t.comuna))).size };
   }).sort((a, b) => b.valor - a.valor);
   const max = Math.max(...provs.map(p => p.v), merc || 0) * 1.15 || 1;
@@ -439,24 +491,26 @@ function renderComparar() {
       : '<div class="cmp-cab"><b>Nadie cobra por ' + esc(CMP.residuo) + ' en ' + esc(CMP.region) + ': solo hay compradores del material</b></div>') +
       provs.map((p, i) => {
         const dif = merc ? (p.v - merc) / merc : 0;
-        return '<div class="cmp-fila"><div><b>' + esc(p.nombre) + '</b><div class="muted small">' + p.n + ' sucursal' + (p.n > 1 ? 'es' : '') + ' · ' + esc(p.conf.txt.toLowerCase()) + '</div></div>' +
+        return '<div class="cmp-fila"><div>' + cmpNombreHtml(p.nombre, p.provKey, true) + '<div class="muted small">' + p.n + ' sucursal' + (p.n > 1 ? 'es' : '') + ' · ' + esc(p.conf.txt.toLowerCase()) + '</div></div>' +
           '<div class="cmp-barra"><div class="cmp-val' + (i === 0 ? ' mejor' : '') + '" style="width:' + pct(p.v) + '"></div><div class="cmp-merc" style="left:' + pct(merc) + '" title="Precio de mercado"></div></div>' +
           '<div class="num"><b>' + fmtCLP(p.v) + '</b><div class="small ' + (Math.abs(dif) < 0.005 ? "muted" : dif < 0 ? "ok-msg" : "warn") + '">' + (Math.abs(dif) < 0.005 ? "igual al mercado" : Math.round(Math.abs(dif) * 100) + "% " + (dif < 0 ? "bajo" : "sobre") + " mercado") + '</div></div></div>';
       }).join('') +
       '<div class="cmp-fila cmp-eje"><div></div><div class="muted small">│ línea = precio de mercado</div><div></div></div>' +
       '<div class="tscroll"><table class="ttar cmp-tab"><tr><th>Proveedor</th><th>Contenedor</th><th class="num">m³</th><th class="num">Operativo / m³</th><th class="num">Mín – máx / m³</th>' +
         '<th class="num">Retiro</th><th class="num">Disposición</th><th class="num">Arriendo / mes</th><th class="num">Sucursales</th></tr>' +
-        provs.flatMap(p => p.porCont.map((c, j) => '<tr' + (j ? ' class="cmp-sub"' : '') + '><td>' + (j ? '' : '<b>' + esc(p.nombre) + '</b>') + '</td><td>' + esc(c.cont || "—") + '</td><td class="num">' + (c.vol ? fmtNum(c.vol, 2) : "—") + '</td>' +
+        provs.flatMap(p => p.porCont.map((c, j) => '<tr' + (j ? ' class="cmp-sub"' : '') + '><td>' + (j ? '' : cmpNombreHtml(p.nombre, p.provKey)) + '</td><td>' + esc(c.cont || "—") + '</td><td class="num">' + (c.vol ? fmtNum(c.vol, 2) : "—") + '</td>' +
           '<td class="num"><b>' + fmtCLP(c.op) + '</b></td><td class="num">' + (c.min === c.max ? fmtCLP(c.min) : fmtCLP(c.min) + ' – ' + fmtCLP(c.max)) + '</td>' +
           '<td class="num">' + (c.retiro != null ? fmtCLP(c.retiro) + (c.retiroConDisp ? '<div class="muted small">transporte + disposición' + (c.retiroCalc ? ' · ' + fmtNum(c.vol, 2) + ' m³ × costo por m³' : '') + '</div>' : '') : "—") + '</td>' +
           '<td class="num">' + (c.disp != null ? fmtCLP(c.disp) + (c.dispUnidad ? ' <span class="muted small">/ ' + esc(c.dispUnidad) + '</span>' : '') : c.retiroConDisp ? '<span class="muted small">incluida en el retiro</span>' : (c.compra ? '' : "—")) +
             (c.compra ? '<div class="paga-txt">+' + fmtCLP(c.compra.valor) + ' / ' + esc(c.compra.unidad) + ' <span class="small">paga el proveedor</span></div>' : '') + '</td>' +
-          '<td class="num">' + (c.arriendo != null ? fmtCLP(c.arriendo) : "—") + '</td><td class="num">' + c.n + '</td></tr>')).join('') +
-        compradores.map(c => '<tr class="cmp-compra"><td><b>' + esc(c.nombre) + '</b></td><td>—</td><td class="num">—</td>' +
+          '<td class="num">' + (c.arriendo != null ? fmtCLP(c.arriendo) : "—") + '</td><td class="num">' + c.n + '</td></tr>')
+          .concat(CMP_ABIERTOS.has(p.provKey) ? ['<tr class="cmp-det-fila"><td colspan="9">' + cmpDetalleHtml({ provKey: p.provKey, nombre: p.nombre, residuo: CMP.residuo, region: CMP.region, items: p.items, tarifas: p.tarifas }) + '</td></tr>'] : [])).join('') +
+        compradores.map(c => '<tr class="cmp-compra"><td>' + cmpNombreHtml(c.nombre, c.provKey) + '</td><td>—</td><td class="num">—</td>' +
           '<td class="num"><span class="muted small">no cobra</span></td><td class="num">—</td><td class="num">—</td>' +
           '<td class="num"><div class="paga-txt">+' + fmtCLP(c.valor) + ' / ' + esc(c.unidad) + '</div><div class="paga-txt small">compra de material</div>' +
             (c.min !== c.max ? '<div class="muted small">' + fmtCLP(c.min) + ' – ' + fmtCLP(c.max) + '</div>' : '') + '</td>' +
-          '<td class="num">—</td><td class="num">' + c.n + '</td></tr>').join('') +
+          '<td class="num">—</td><td class="num">' + c.n + '</td></tr>' +
+          (CMP_ABIERTOS.has(c.provKey) ? '<tr class="cmp-det-fila"><td colspan="9">' + cmpDetalleHtml({ provKey: c.provKey, nombre: c.nombre, residuo: CMP.residuo, region: CMP.region, items: null, tarifas: c.tarifas, servicio: "Compra de material" }) + '</td></tr>' : '')).join('') +
       '</table></div>' +
       '<div class="muted small">Cada proveedor se calcula por separado (nunca se mezcla el retiro de uno con la disposición de otro): la barra es la mediana de todas sus sucursales en la región; la tabla separa cada contenedor, con el rango entre sus sucursales. Los contenedores chicos cuestan más por m³. El arriendo se prorratea con ' + RETIROS_MES + ' retiros al mes. Disposición por kg llevada a m³ con la densidad del residuo' + (densidadDe(CMP.residuo) ? ' (' + fmtNum(densidadDe(CMP.residuo).kgm3, 0) + ' kg/m³)' : '') + '.</div></div>');
 }

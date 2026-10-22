@@ -152,8 +152,8 @@ function etBloqueHtml(b) {
     const sub = [b.init.detalle === null && tget(t, "detalle") ? "Detalle: " + tget(t, "detalle") : "", t.alertas && t.alertas.length && !ET.destacar.has(id) ? "⚠ " + t.alertas[0] : ""].filter(Boolean).map(esc).join(" · ");
     const acc = f.baja
       ? '<button type="button" class="lnk small" title="Deshacer" onclick="etBaja(\'' + esc(id) + '\',false)">↺ deshacer</button>'
-      : '<button type="button" class="ico-btn danger" title="Dar de baja esta tarifa" onclick="etBaja(\'' + esc(id) + '\',true)">−</button>';
-    lineas.push({ r: t.residuo || "(sin residuo)", html: etFila('data-id="' + esc(id) + '"', t.residuo || "(sin residuo)", f, (f.baja ? '<span class="warn">se dará de baja</span>' + (sub ? " · " : "") : "") + sub, acc, f.baja ? "et-baja" : ET.destacar.has(id) ? "et-alerta" : "") +
+      : '<button type="button" class="ico-btn danger" title="Eliminar esta tarifa" onclick="etBaja(\'' + esc(id) + '\',true)">−</button>';
+    lineas.push({ r: t.residuo || "(sin residuo)", html: etFila('data-id="' + esc(id) + '"', t.residuo || "(sin residuo)", f, (f.baja ? '<span class="warn">se eliminará</span>' + (sub ? " · " : "") : "") + sub, acc, f.baja ? "et-baja" : ET.destacar.has(id) ? "et-alerta" : "") +
       (ET.destacar.has(id) && !f.baja && t.alertas && t.alertas.length ? '<tr class="et-alerta-txt"><td colspan="10">' + t.alertas.map(a => '⚠ ' + esc(a)).join('<br>') + '</td></tr>' : '') });
   });
   ET.nuevas.forEach((n, i) => {
@@ -242,14 +242,14 @@ function etCondCambiadas(b) {
 function etArmar() {
   etCapturar();
   const num = (txt, donde) => { if (txt === "") return ""; const n = numDe(txt); if (n == null) throw new Error("Revisa el monto de " + donde + "."); return n; };
-  const editar = [], baja = [], crear = [];
+  const editar = [], eliminar = [], crear = []; // "−" elimina (f.baja = marcada para eliminar)
   ET.blks.forEach(b => {
     const cond = etCondCambiadas(b);
     const donde = b.ref ? "la referencial" : [b.cliente, b.sucursal].filter(Boolean).join(" · ");
     if (cond.fecha === "" ) throw new Error("La fecha no puede quedar vacía (" + donde + ").");
     b.ids.forEach(id => {
       const f = ET.filas[id], t = f.t;
-      if (f.baja) { baja.push(id); return; }
+      if (f.baja) { eliminar.push(id); return; }
       const c = Object.assign({}, cond);
       const monto = num(f.monto, (t.residuo || "residuo") + " en " + donde);
       if (monto === "" ? t.precio_num != null : monto !== t.precio_num) c.precio = monto;
@@ -289,13 +289,13 @@ function etArmar() {
   });
   const faltan = crear.map(d => ({ d, f: faltantesMinimos(d) })).find(x => x.f.length);
   if (faltan) throw new Error("Cobro nuevo: " + textoFaltantes(faltan.d, faltan.f) + " Complétalo en las condiciones del bloque.");
-  return { editar, baja, crear, total: editar.length + baja.length + crear.length };
+  return { editar, eliminar, crear, total: editar.length + eliminar.length + crear.length };
 }
 function etResumen() {
   const st = document.getElementById("e_status"); if (!st || !ET) return;
   try {
     const a = etArmar();
-    st.textContent = a.total ? [a.editar.length ? a.editar.length + " se editarán" : "", a.baja.length ? a.baja.length + " se darán de baja" : "", a.crear.length ? a.crear.length + " se crearán" : ""].filter(Boolean).join(" · ") + "." : "Sin cambios.";
+    st.textContent = a.total ? [a.editar.length ? a.editar.length + " se editarán" : "", a.eliminar.length ? a.eliminar.length + " se eliminarán" : "", a.crear.length ? a.crear.length + " se crearán" : ""].filter(Boolean).join(" · ") + "." : "Sin cambios.";
   } catch (e) { st.textContent = e.message; }
 }
 async function etGuardar() {
@@ -304,7 +304,7 @@ async function etGuardar() {
     const a = etArmar();
     if (!a.total) throw new Error("No hay cambios que guardar.");
     if (a.total > 300) throw new Error("Son " + a.total + " cambios; el máximo es 300 por vez.");
-    if (!confirm("Se guardarán los cambios de " + ET.nombre + ":\n" + [a.editar.length ? "· " + a.editar.length + " tarifa(s) editada(s)" : "", a.baja.length ? "· " + a.baja.length + " dada(s) de baja" : "", a.crear.length ? "· " + a.crear.length + " nueva(s)" : ""].filter(Boolean).join("\n") + "\n\nCada cambio queda en el Historial. ¿Continuar?")) return;
+    if (!confirm("Se guardarán los cambios de " + ET.nombre + ":\n" + [a.editar.length ? "· " + a.editar.length + " tarifa(s) editada(s)" : "", a.eliminar.length ? "· " + a.eliminar.length + " eliminada(s) (no se pueden restaurar)" : "", a.crear.length ? "· " + a.crear.length + " nueva(s)" : ""].filter(Boolean).join("\n") + "\n\nCada cambio queda en el Historial. ¿Continuar?")) return;
     if (!sesionActiva()) await iniciarSesion();
     btn.disabled = true;
     st.textContent = "Guardando…";
@@ -317,8 +317,9 @@ async function etGuardar() {
     for (const d of a.crear) await asegurarCatalogos(d);
     for (const e of a.editar) await asegurarCatalogos(e.cambios);
     const r = await api("tarifa_lote", { lote: a }, true);
+    a.eliminar.forEach(id => { PENDIENTES[id] = { eliminada: true, t: Date.now() }; });
     await refrescarTrasGuardar(r.tarifas);
-    st.textContent = "Listo: " + [r.editadas ? r.editadas + " editada(s)" : "", r.bajas ? r.bajas + " dada(s) de baja" : "", r.creadas ? r.creadas + " nueva(s)" : ""].filter(Boolean).join(", ") + ".";
+    st.textContent = "Listo: " + [r.editadas ? r.editadas + " editada(s)" : "", r.eliminadas ? r.eliminadas + " eliminada(s)" : "", r.creadas ? r.creadas + " nueva(s)" : ""].filter(Boolean).join(", ") + ".";
     setTimeout(() => cerrarModal("editarTarifasModal"), 800);
   } catch (e) {
     st.textContent = "Error: " + e.message;

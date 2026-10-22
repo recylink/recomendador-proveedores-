@@ -184,6 +184,7 @@ tr.abierta .t-flecha { transform:rotate(90deg); }
 .imp-resumen .pill { font-size:12px; padding:3px 9px; }
 .pill.imp-nueva { background:#dcfce7; color:#166534; }
 .pill.imp-actualiza { background:#dbeafe; color:#1e40af; }
+.pill.imp-anterior { background:#F2F4F7; color:#475467; }
 .pill.imp-error { background:#fee2e2; color:#991b1b; }
 /* Alertas: detalle al pasar el mouse y campos a completar */
 .t-alerta[data-al] { cursor:pointer; }
@@ -253,3 +254,31 @@ tr.abierta .t-flecha { transform:rotate(90deg); }
 .cmp-chips button.on { background:#0069A6; border-color:#0069A6; color:#fff; font-weight:600; }
 .cmp-tab tr.cmp-sub td { border-top:none; } .cmp-tab th .muted { font-weight:400; text-transform:none; letter-spacing:0; }
 .paga-txt { color:#067647; font-weight:700; } .paga-txt .small { font-weight:500; } .desg-tab tr.desg-paga td { color:#067647; font-weight:600; }
+/* Historial de precios (fase 3) */
+.his-chk { flex-direction:row !important; align-items:center; gap:6px !important; font-weight:400 !important; min-height:36px; }
+.his-ley { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:13px; color:#344054; align-items:center; }
+.his-ley span { display:inline-flex; align-items:center; gap:6px; }
+.his-sep { width:1px; height:16px; background:#E4E7EC; }
+.his-sw { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; flex:none; }
+.his-ley .his-sw { margin-right:0; }
+.his-ico { flex:none; }
+.his-graf { position:relative; width:100%; }
+.his-graf svg { display:block; }
+.his-eje { font-size:12px; fill:#475467; font-family:inherit; }
+.his-pt { cursor:default; }
+.his-tip { position:absolute; z-index:5; background:#fff; border:1px solid #D0D5DD; border-radius:8px; box-shadow:0 4px 12px rgba(16,24,40,.12); padding:8px 10px; font-size:12px; max-width:280px; pointer-events:none; }
+.his-tip-cab { display:flex; align-items:center; }
+.his-tip-val { font-size:15px; font-weight:700; color:#1D2939; margin:2px 0; }
+tr.his-ant td { color:#667085; }
+.his-fecha { white-space:nowrap; }
+/* Comparar por región: detalle del proveedor al hacer clic en su nombre */
+.cmp-prov { font:inherit; color:#0069A6; background:none; border:0; padding:4px 0; cursor:pointer; text-align:left; min-height:32px; }
+.cmp-prov:hover b { text-decoration:underline; }
+.cmp-prov:focus-visible { outline:2px solid #0069A6; outline-offset:2px; border-radius:4px; }
+.cmp-flecha { color:#667085; font-size:12px; }
+.cmp-det-fila > td { background:#F5FAFD; padding:0 !important; }
+.cmp-detalle { border-left:3px solid #0069A6; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
+.cmp-det-cab { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; align-items:flex-start; }
+.cmp-det-acc { display:flex; gap:12px; flex-wrap:wrap; }
+.cmp-det-tab { background:#fff; }
+.cmp-det-tab tr.cmp-det-txt td { border-top:none; color:#475467; font-size:12px; padding-top:0; }

@@ -24,7 +24,7 @@ const IMP_COLUMNAS = [
   ["precio", "Precio", "Neto (sin IVA), solo el número.", "57000"],
   ["moneda", "Moneda", "CLP o UF. Vacío = CLP.", "CLP"],
   ["unidad", "Unidad", "kg, ton, m3, viaje, retiro, servicio, mes, unidad…", "viaje"],
-  ["tipo_servicio", "Tipo de servicio", "Transporte, Disposición, Transporte + disposición, Arriendo o Compra de material. Obligatorio.", "Transporte"],
+  ["tipo_servicio", "Tipo de servicio", "Transporte, Disposición, Transporte + disposición, Arriendo, Compra de material, Peoneta, Servicio de faena o Hidrojet. Obligatorio.", "Transporte"],
   ["contenedor", "Contenedor o vehículo", "Tipo, sin medida (Batea, Tolva, Camión…). Obligatorio si la unidad es viaje o retiro. Varios separados por ;", "Batea"],
   ["volumen_m3", "Volumen m3", "Volumen del contenedor en m³. Obligatorio si la unidad es viaje o retiro.", "30"],
   ["cantidad_min", "Cantidad mínima", "Tramo en que rige el precio (opcional).", ""],
@@ -159,7 +159,7 @@ function validarImportada(d) {
 function claveCarga(t) {
   const tipo = String(t.tipo || t.tipo_transaccion || "").toLowerCase() === "paga" ? "paga" : "cobra";
   const prov = tget(t, "proveedor_id") || "n:" + norm(t.proveedor_nombre);
-  return [prov, norm(t.cliente), norm(t.sucursal), t.sucursal ? "" : norm(t.comuna), norm(t.residuo), norm(t.unidad), contKey(t), tipo].join("|");
+  return [prov, norm(t.cliente), norm(t.sucursal), t.sucursal ? "" : norm(t.comuna), norm(t.residuo), norm(t.unidad), contKey(t), tipo].join("|") + (servicioClave(t) ? "|" + servicioClave(t) : "");
 }
 
 const CAMPOS_COMPARAR = ["precio", "moneda", "fecha", "tipo_servicio", "cantidad_min", "cantidad_max", "estado_servicio", "detalle", "direccion", "comuna", "region", "fuente", "pdf_url",
@@ -176,6 +176,8 @@ function planificarCarga(lista) {
   lista.forEach(d => {
     const t = porClave[claveCarga(d)];
     if (!t || usadas[t.id]) { plan.crear.push(d); return; }
+    // precio más antiguo que el vigente (llegó después): tarifa propia, que queda como anterior; no pisa la vigente
+    if (d.fecha && String(d.fecha).slice(0, 10) < tget(t, "fecha").slice(0, 10)) { d._anterior = t.id; plan.crear.push(d); return; }
     usadas[t.id] = true;
     const cambios = {}, antes = {};
     CAMPOS_COMPARAR.forEach(c => {
@@ -284,7 +286,7 @@ function vistaImportacionHtml() {
       '<td>' + esc(d.residuo) + '<div class="muted small">' + esc([d.tipo_servicio, d.contenedor].filter(Boolean).join(" · ")) + '</div></td>' +
       '<td>' + esc(d.comuna || "-") + '</td><td class="num">' + precio + (otros.length ? '<div class="muted small">cambia: ' + esc(otros.join(", ")) + '</div>' : "") + '</td></tr>';
   };
-  const filas = plan.editar.map(e => fila("Actualiza", e.d, e)).concat(plan.crear.map(d => fila("Nueva", d)));
+  const filas = plan.editar.map(e => fila("Actualiza", e.d, e)).concat(plan.crear.map(d => fila(d._anterior ? "Anterior" : "Nueva", d)));
   return '<div class="imp-resumen">' +
     '<span class="pill imp-nueva">' + plan.crear.length + ' nuevas</span>' +
     '<span class="pill imp-actualiza">' + plan.editar.length + ' se actualizan</span>' +

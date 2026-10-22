@@ -245,6 +245,7 @@ function aplicarPendientes() {
     const p = PENDIENTES[id];
     if (ahora - p.t > 600000) { delete PENDIENTES[id]; return; }
     const i = TARIFAS.findIndex(t => t.id === id);
+    if (p.eliminada) { if (i !== -1) TARIFAS.splice(i, 1); return; } // el espejo puede tardar en dejar de mostrarla
     if (i !== -1 && tget(TARIFAS[i], "actualizado_el") >= tget(p.fila, "actualizado_el")) { delete PENDIENTES[id]; return; }
     const t = prepararTarifa(Object.assign({}, p.fila));
     if (i === -1) TARIFAS.push(t); else TARIFAS[i] = t;
@@ -550,8 +551,7 @@ function filaTarifaHtml(t, opts) {
     '<td class="acc">' +
       '<button class="lnk" onclick="abrirFormTarifa(\'' + esc(t.id) + '\')">Editar</button>' +
       '<button class="lnk" onclick="verHistorial(\'' + esc(t.id) + '\')">Historial</button>' +
-      (t.activo ? '<button class="lnk danger" onclick="cambiarActivo(\'' + esc(t.id) + '\',false)">Dar de baja</button>'
-                : '<button class="lnk" onclick="cambiarActivo(\'' + esc(t.id) + '\',true)">Restaurar</button>') +
+      '<button class="lnk danger" onclick="eliminarTarifa(\'' + esc(t.id) + '\')">Eliminar</button>' +
       '<div class="muted small">' + esc((t.actualizado_el || "").slice(0, 10)) + ' · ' + esc((t.actualizado_por || "").replace(/@.*/, "")) + '</div>' +
     '</td></tr>';
 }
@@ -910,7 +910,7 @@ function renderTarifas() {
     const s = proveedorDeTarifa(t);
     return !!s && rutClave(s.rut).indexOf(fProvRut) !== -1;
   };
-  const verAnt = chk("tfAnteriores"), verBaja = chk("tfBajas"), soloAl = chk("tfAlertas");
+  const verAnt = chk("tfAnteriores"), verBaja = false, soloAl = chk("tfAlertas");
 
   const ufInfo = document.getElementById("ufInfo");
   if (ufInfo) ufInfo.textContent = UF.valor ? "UF " + fmtCLP(UF.valor) + " (" + UF.fecha + ", " + UF.origen + ")" : "UF no disponible: los precios en UF no se convierten";
@@ -937,6 +937,7 @@ function renderTarifas() {
     provs.map(filaProveedorHtml).join('') + '</table></div></div>';
   const cmp = document.getElementById("tarComparar");
   if (cmp && cmp.style.display !== "none") renderComparar();
+  if (typeof renderHistorialPrecios === "function") renderHistorialPrecios();
 }
 
 /** Columna Residuos: los que el proveedor gestiona según ClickUp (si no tiene ficha, los de sus tarifas). */
@@ -1120,12 +1121,12 @@ function botonReferencial(f) {
     : '<button class="ico-btn" disabled title="' + (f.sinTarifas ? 'No hay tarifa que eliminar' : 'Es el promedio de las tarifas de clientes: para quitarlo, da de baja esas tarifas en el detalle') + '" aria-label="Eliminar (no disponible)">−</button>';
   return btnEditar + btnEliminar;
 }
-/** Quita un valor de referencia fijado a mano (lo da de baja: queda en el historial y se puede restaurar). */
+/** Elimina un valor de referencia fijado a mano (la referencial vuelve a ser la mediana; su copia queda en el Historial de cambios). */
 async function eliminarReferencial(id) {
   const t = TARIFAS.find(x => x.id === id); if (!t) return;
   const precio = t.precio_num == null ? "sin precio" : (t.moneda === "UF" ? fmtNum(t.precio_num) + " UF" : fmtCLP(t.precio_num)) + (t.unidad ? " / " + t.unidad : "");
-  if (!confirm("¿Estás seguro de eliminar la tarifa referencial de " + (t.residuo || "este residuo") + " (" + precio + ") de " + t.proveedor_nombre + "?\n\nLa tarifa referencial vuelve a calcularse con el promedio. Queda en el historial y se puede restaurar con \"Mostrar dadas de baja\".")) return;
-  try { const r = await api("tarifa_baja", { id }, true); await refrescarTrasGuardar([r.tarifa]); }
+  if (!confirm("¿Estás seguro de eliminar la tarifa referencial de " + (t.residuo || "este residuo") + " (" + precio + ") de " + t.proveedor_nombre + "?\n\nLa tarifa referencial vuelve a calcularse con la mediana. No se puede restaurar (sus datos quedan copiados en el Historial de cambios).")) return;
+  try { await api("tarifa_eliminar", { id }, true); PENDIENTES[id] = { eliminada: true, t: Date.now() }; await refrescarTrasGuardar([]); }
   catch (e) { alert("No se pudo eliminar: " + e.message); }
 }
 /** Tarjeta de Proveedores: solo los residuos con valor (promedio o fijado); la tabla completa está en Tarifas. */
@@ -1531,11 +1532,18 @@ async function guardarSucursal(i, btn) {
 }
 
 /* ---------------- baja / historial ---------------- */
-async function cambiarActivo(id, activo) {
-  const t = TARIFAS.find(x => x.id === id);
-  if (!activo && !confirm("¿Dar de baja esta tarifa de " + (t ? t.proveedor_nombre : "") + "? Se puede restaurar después.")) return;
-  try { const r = await api(activo ? "tarifa_restaurar" : "tarifa_baja", { id }, true); await refrescarTrasGuardar([r.tarifa]); }
-  catch (e) { alert("No se pudo: " + e.message); }
+/** Borra la tarifa para siempre (reemplaza a "Dar de baja", decisión 2026-10-22); su copia queda en el Historial de cambios. */
+async function eliminarTarifa(id) {
+  const t = TARIFAS.find(x => x.id === id); if (!t) return;
+  const desc = [t.proveedor_nombre, [t.cliente, t.sucursal].filter(Boolean).join(" · ") || "Valor general", t.residuo, t.tipo_servicio,
+    t.precio_num == null ? "sin precio" : (t.moneda === "UF" ? fmtNum(t.precio_num) + " UF" : fmtCLP(t.precio_num)) + (t.unidad ? " / " + t.unidad : ""), t.fecha].filter(Boolean).join(" · ");
+  if (!confirm("¿Eliminar definitivamente esta tarifa?\n\n" + desc + "\n\nNo se puede restaurar ni aparece en el Historial de precios (sus datos quedan copiados en el Historial de cambios). " +
+    "Un precio más nuevo del mismo cobro ya reemplaza al anterior sin eliminarlo.")) return;
+  try {
+    await api("tarifa_eliminar", { id }, true);
+    PENDIENTES[id] = { eliminada: true, t: Date.now() };
+    await refrescarTrasGuardar([]);
+  } catch (e) { alert("No se pudo eliminar: " + e.message); }
 }
 
 async function verHistorial(id) {
@@ -1543,7 +1551,7 @@ async function verHistorial(id) {
   try {
     const rows = filasAObjetos(await gvizFetch(MIRROR_SHEET_ID, HISTORIAL_GID, true, true)).filter(h => h.tarifa_id === id);
     rows.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
-    const nombreAccion = { crear: "Creó la tarifa", editar: "Editó", baja: "Dio de baja", restaurar: "Restauró" };
+    const nombreAccion = { crear: "Creó la tarifa", editar: "Editó", baja: "Dio de baja", restaurar: "Restauró", eliminar: "Eliminó (copia de sus datos)" };
     abrirModal("histModal", '<h3>Historial de ' + esc(id) + '</h3>' + (rows.length
       ? '<div class="tscroll"><table class="ttar"><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Campo</th><th>Antes</th><th>Después</th></tr>' +
         rows.map(h => '<tr><td class="small">' + esc(h.fecha) + '</td><td class="small">' + esc(h.usuario) + '</td><td>' + esc(nombreAccion[h.accion] || h.accion) + '</td><td>' + (h.campo === "*" ? "" : esc(h.campo)) + '</td><td>' + (h.accion === "crear" ? "" : esc(h.valor_anterior)) + '</td><td>' + (h.accion === "crear" ? "" : esc(h.valor_nuevo)) + '</td></tr>').join('') + '</table></div>'
@@ -1757,7 +1765,7 @@ function tarifasInit() {
   document.getElementById("tfResiduoBox").innerHTML = mselHtml("tfResiduo", { placeholder: "Todos (+ agregar)", onChange: renderTarifas });
   document.getElementById("tfComunaBox").innerHTML = mselHtml("tfComuna", { placeholder: "Todas (+ agregar)", onChange: renderTarifas });
   document.getElementById("tfRegion").addEventListener("change", comunasSegunRegion);
-  ["tfRegion", "tfUnidad", "tfEstado", "tfTipo", "tfServicio", "tfAnteriores", "tfBajas", "tfAlertas"].forEach(id => document.getElementById(id).addEventListener("change", renderTarifas));
+  ["tfRegion", "tfUnidad", "tfEstado", "tfTipo", "tfServicio", "tfAnteriores", "tfAlertas"].forEach(id => document.getElementById(id).addEventListener("change", renderTarifas));
   ["tfProveedor", "tfSucursal"].forEach(id => document.getElementById(id).addEventListener("input", renderTarifas));
   document.getElementById("tfEmpresa").addEventListener("input", e => { actualizarSucursalDL("tfSucursalDL", e.target.value); renderTarifas(); });
   sinaderInit();

@@ -6,7 +6,11 @@
    - Lo usan el formulario, Nueva tarifa, Editar tarifas, Importar planilla y Pegar desde Claude.
    Depende de js/tarifas.js (CATS, esc, norm, tget, siNo, campo, inp, sel) y js/sinader.js.
    ============================================================ */
-const TIPOS_SERVICIO = ["Transporte", "Disposición", "Transporte + disposición", "Arriendo", "Compra de material"];
+const TIPOS_SERVICIO = ["Transporte", "Disposición", "Transporte + disposición", "Arriendo", "Compra de material", "Peoneta", "Servicio de faena", "Hidrojet"];
+// Peoneta, faena e hidrojet: servicios por viaje cobrados aparte del transporte (facturas Recycling–Abastible Talca, 2026-10-22)
+const TIPOS_BASE = TIPOS_SERVICIO.slice(0, 5);
+/** Tipo de servicio en la clave de duplicados, solo si no es de los básicos (peoneta y faena del mismo viaje son tarifas distintas). */
+const servicioClave = t => { const ts = tget(t, "tipo_servicio"); return ts && !canonDe(TIPOS_BASE, ts) ? norm(ts) : ""; };
 const TIPOS_CON_DESTINO = ["Transporte", "Disposición", "Transporte + disposición"];
 const UNIDADES_CON_CONTENEDOR = ["viaje", "retiro"];
 const MOTIVOS_PRECIO = ["Precio de lista", "Por volumen", "Acuerdo marco", "Promoción", "Licitación", "Precio de entrada", "Precio ejecutado", "Otro", "No sé"];

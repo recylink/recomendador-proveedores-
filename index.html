@@ -114,10 +114,10 @@ a { color:var(--blue); }
   .print-header img { height:34px; width:auto; }
 }
 </style>
-<link rel="stylesheet" href="css/tarifas.css?v=3.58">
+<link rel="stylesheet" href="css/tarifas.css?v=3.64">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="css/recylink.css?v=3.58">
+<link rel="stylesheet" href="css/recylink.css?v=3.64">
 </head>
 <body>
 <div class="wrap">
@@ -181,7 +181,6 @@ a { color:var(--blue); }
       <div class="estados">
         <label class="chk"><input type="checkbox" id="tfAlertas"> Solo con alertas &#9888;</label>
         <label class="chk"><input type="checkbox" id="tfAnteriores"> Mostrar valores anteriores</label>
-        <label class="chk"><input type="checkbox" id="tfBajas"> Mostrar dadas de baja</label>
       </div>
     </div>
     <div class="tar-actions">
@@ -193,12 +192,14 @@ a { color:var(--blue); }
       <span id="ufInfo"></span>
     </div>
     <div class="tar-vista" role="group" aria-label="Vista de tarifas">
-      <button type="button" class="on" data-v="lista" onclick="abrirComparar(false)">Proveedores</button>
-      <button type="button" data-v="cmp" onclick="abrirComparar(true)">Comparar por región</button>
+      <button type="button" class="on" data-v="lista" onclick="abrirVistaTar('lista')">Proveedores</button>
+      <button type="button" data-v="cmp" onclick="abrirVistaTar('cmp')">Comparar por región</button>
+      <button type="button" data-v="his" onclick="abrirVistaTar('his')">Historial de precios</button>
     </div>
     <div class="count" id="tarCount"></div>
     <div id="tarList"></div>
     <div id="tarComparar" style="display:none"></div>
+    <div id="tarHistorial" style="display:none"></div>
   </div>
   <div id="viewSin" style="display:none">
     <div class="controls tar-controls">
@@ -233,14 +234,15 @@ a { color:var(--blue); }
 </div>
 
 <!-- ?v=: subir el número al publicar cambios en estos archivos, para que el navegador no use la copia vieja -->
-<script src="js/comunas.js?v=3.58"></script>
-<script src="js/esquema.js?v=3.58"></script>
-<script src="js/tarifas.js?v=3.58"></script>
-<script src="js/referenciales.js?v=3.58"></script>
-<script src="js/sinader.js?v=3.58"></script>
-<script src="js/nueva-tarifa.js?v=3.58"></script>
-<script src="js/editar-tarifas.js?v=3.58"></script>
-<script src="js/importar.js?v=3.58"></script>
+<script src="js/comunas.js?v=3.64"></script>
+<script src="js/esquema.js?v=3.64"></script>
+<script src="js/tarifas.js?v=3.64"></script>
+<script src="js/referenciales.js?v=3.64"></script>
+<script src="js/historial.js?v=3.64"></script>
+<script src="js/sinader.js?v=3.64"></script>
+<script src="js/nueva-tarifa.js?v=3.64"></script>
+<script src="js/editar-tarifas.js?v=3.64"></script>
+<script src="js/importar.js?v=3.64"></script>
 <script>
 /* ============================================================
    FUENTES DE DATOS (lectura via gviz)
