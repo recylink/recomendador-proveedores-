@@ -355,6 +355,7 @@ function mediana(arr) {
 }
 
 function calcularAlertas() {
+  if (typeof _MERCADO !== "undefined") _MERCADO = null; // el precio de mercado se recalcula con las tarifas nuevas
   const activas = TARIFAS.filter(t => t.activo);
   marcarVigentes(activas);
   const grupos = {};
@@ -941,6 +942,8 @@ function renderTarifas() {
   box.innerHTML = '<div class="tgrupo"><div class="tscroll"><table class="ttar t-compacta">' +
     '<tr><th>Proveedor</th><th>Residuos</th><th>Tarifa referencial</th><th>Empresas</th><th>Actualizado</th></tr>' +
     provs.map(filaProveedorHtml).join('') + '</table></div></div>';
+  const cmp = document.getElementById("tarComparar");
+  if (cmp && cmp.style.display !== "none") renderComparar();
 }
 
 /** Columna Residuos: los que el proveedor gestiona según ClickUp (si no tiene ficha, los de sus tarifas). */
@@ -960,9 +963,10 @@ function filaProveedorHtml(ts) {
   const gid = "g" + (++GRUPO_SEQ);
   const t0 = ts[0];
   const alertas = ts.filter(t => t.alertas && t.alertas.length).length;
-  const conPrecio = referenciales(ts).filter(f => f.conPrecio);
+  // Referencial corta: primero los costos por m³ (por región), después lo que va por unidad
+  const conPrecio = referencialRegiones(ts).filter(f => f.valor != null).sort((a, b) => (a.tipo === "m3" ? 0 : 1) - (b.tipo === "m3" ? 0 : 1));
   const refCorta = conPrecio.length
-    ? conPrecio.slice(0, 3).map(f => '<div class="small">' + esc(f.residuo) + ' ' + refPrecioHtml(f) + '</div>').join('') + (conPrecio.length > 3 ? '<div class="muted small">+' + (conPrecio.length - 3) + ' más</div>' : '')
+    ? conPrecio.slice(0, 3).map(f => '<div class="small">' + esc(f.residuo) + (f.region ? ' <span class="muted">' + esc(f.region) + '</span>' : '') + ' <b class="' + (f.paga ? "t-paga" : "") + '">' + fmtCLP(f.valor) + '</b> <span class="muted">/ ' + esc(f.tipo === "m3" ? "m³" : f.unidad || "") + '</span></div>').join('') + (conPrecio.length > 3 ? '<div class="muted small">+' + (conPrecio.length - 3) + ' más</div>' : '')
     : '<span class="muted">sin precio</span>';
   const empresas = unicosOrdenados(ts.filter(t => !esGeneral(t)).map(t => t.cliente));
   const actualizado = ts.map(t => String(t.actualizado_el || t.fecha || "").slice(0, 10)).sort().pop();
@@ -982,7 +986,7 @@ function filaProveedorHtml(ts) {
   const detalle =
     '<tr class="t-detalle" data-det="' + gid + '" style="display:none"><td colspan="5">' +
       contactoProveedorTarifa(t0) +
-      referencialHtml(ts, { proveedor: t0.proveedor_nombre, titulo: "Residuos que gestiona y tarifa referencial",
+      referencialRegionHtml(ts, { proveedor: t0.proveedor_nombre, titulo: "Residuos que gestiona y tarifa referencial por región",
         residuosCU: ((proveedorDeTarifa(t0) || {}).residuosCU) || [] }) +
       (bloques.length ? '<div class="t-acciones"><span class="muted small">Editar en bloque:</span> ' + bloques.map(g =>
         '<button class="cbtn sec mini" onclick="abrirFormGrupo(\'' + esc(g[0].id) + '\')">' + esc(unicosOrdenados(g.map(t => t.residuo)).join(", ")) + ' · ' + esc(precioCorto(g[0])) + ' (' + g.length + ')</button>').join(' ') + '</div>' : '') +
@@ -1133,7 +1137,7 @@ async function eliminarReferencial(id) {
 }
 /** Tarjeta de Proveedores: solo los residuos con valor (promedio o fijado); la tabla completa está en Tarifas. */
 function tarifasResumenProveedor(s) {
-  return referencialHtml(tarifasDeProveedor(s), { proveedor: s.name, soloConPrecio: true, titulo: "Tarifa referencial" });
+  return referencialRegionHtml(tarifasDeProveedor(s), { proveedor: s.name, soloConPrecio: true, titulo: "Tarifa referencial por región" });
 }
 
 /** Tarifa efectiva de cada sucursal, con su detalle del cobro y acciones. */
