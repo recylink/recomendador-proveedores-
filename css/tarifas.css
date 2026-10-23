@@ -282,3 +282,13 @@ tr.his-ant td { color:#667085; }
 .cmp-det-acc { display:flex; gap:12px; flex-wrap:wrap; }
 .cmp-det-tab { background:#fff; }
 .cmp-det-tab tr.cmp-det-txt td { border-top:none; color:#475467; font-size:12px; padding-top:0; }
+/* V3 (2026-10-23): tratamiento, cotización vencida, por confirmar, destrucción de marca */
+.t-trat { color:#067647; font-weight:600; }
+.pill.p-vencida { background:#FEE4E2; color:#912018; }
+.pill.p-confirmar { background:#FEF0C7; color:#93370D; }
+.pill.p-dm { background:#E0EAFF; color:#3538CD; }
+.nt-trat { display:flex; flex-direction:column; gap:4px; min-width:190px; }
+.nt-trat select, .nt-trat .sel-otra-txt { max-width:230px; }
+.nt-dm-l { font-size:12px; font-weight:400; }
+.nt-trat .chk, .tf-campo .chk { display:flex; flex-direction:row; align-items:center; gap:6px; }
+.nt-trat input[type=checkbox], .tf-campo .chk input[type=checkbox] { width:16px; height:16px; min-height:0; padding:0; margin:0; flex:none; }

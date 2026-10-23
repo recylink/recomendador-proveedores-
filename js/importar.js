@@ -27,8 +27,11 @@ const IMP_COLUMNAS = [
   ["tipo_servicio", "Tipo de servicio", "Transporte, Disposición, Transporte + disposición, Arriendo, Compra de material, Peoneta, Servicio de faena o Hidrojet. Obligatorio.", "Transporte"],
   ["contenedor", "Contenedor o vehículo", "Tipo, sin medida (Batea, Tolva, Camión…). Obligatorio si la unidad es viaje o retiro. Varios separados por ;", "Batea"],
   ["volumen_m3", "Volumen m3", "Volumen del contenedor en m³. Obligatorio si la unidad es viaje o retiro.", "30"],
-  ["cantidad_min", "Cantidad mínima", "Tramo en que rige el precio (opcional).", ""],
-  ["cantidad_max", "Cantidad máxima", "Tramo en que rige el precio (opcional).", ""],
+  ["tratamiento", "Tratamiento", "Solo en Disposición, Transporte + disposición o Compra de material: Reciclaje, Disposición autorizada de residuos peligrosos, Coprocesamiento (Valorizado)… Si no está para ese residuo, se agrega. Opcional.", "Disposición final de residuos sólidos domiciliarios y asimilables"],
+  ["incluye_destruccion_marca", "Incluye destrucción de marca", "sí / no. Si se cobra aparte, es otra fila con Tipo de servicio = Destrucción de marca. Opcional.", ""],
+  ["cantidad_min", "Carga mínima", "Carga mínima para ese precio (opcional).", ""],
+  ["cantidad_max", "Carga máxima", "Carga máxima para ese precio (opcional).", ""],
+  ["carga_unidad", "Unidad de la carga", "m3, kg, ton, pallet o unidad. Vacío = la unidad del precio.", ""],
   ["direccion", "Dirección", "Donde se retira. No hace falta si la sucursal está registrada.", ""],
   ["comuna", "Comuna", "Comuna de origen. No hace falta si la sucursal está registrada. Varias separadas por ;", ""],
   ["destino", "Destino", "Planta donde termina el residuo (nombre o código RETC).", "Relleno Santa Marta"],
@@ -38,7 +41,10 @@ const IMP_COLUMNAS = [
   ["fuente", "Tipo de fuente", "De la lista (hoja Listas): Contratos de clientes, Cotizaciones de proveedores, Boca a boca… Obligatorio.", "Contratos de clientes"],
   ["fuente_ref", "Referencia", "Qué documento o conversación respalda el precio. Opcional.", "Contrato Sodimac 2026"],
   ["motivo_precio", "Motivo del precio", "Precio de lista, Por volumen, Acuerdo marco, Promoción, Licitación, Precio de entrada, Otro o No sé. Obligatorio.", "Acuerdo marco"],
-  ["detalle", "Detalle", "Condiciones: vigencia, recargos, qué incluye…", "Retiro de batea 30 m3"]
+  ["detalle", "Detalle", "Condiciones: recargos, qué incluye…", "Retiro de batea 30 m3"],
+  ["vigente_hasta", "Vigente hasta", "AAAA-MM-DD. Vigencia de la cotización; al pasar se avisa \"Cotización vencida\". Opcional.", ""],
+  ["por_confirmar", "Por confirmar", "sí si falta confirmar algún dato (baja la confianza). Opcional.", ""],
+  ["valor_agregado", "Valor agregado", "CO2 evitado, material recuperado, trazabilidad… Opcional.", ""]
 ];
 // Otros nombres de columna que se aceptan (sin tildes, espacios ni mayúsculas)
 const IMP_ALIAS = {
@@ -50,6 +56,8 @@ const IMP_ALIAS = {
   SERVICIO: "tipo_servicio", TIPOSERVICIO: "tipo_servicio", VOLUMEN: "volumen_m3", VOLUMENM3: "volumen_m3", M3CONTENEDOR: "volumen_m3",
 CONDICIONDEPAGO: "condicion_pago_dias", DIASDEPAGO: "condicion_pago_dias", PLAZODEPAGO: "condicion_pago_dias", PLANTA_DESTINO: "destino", PLANTADESTINO: "destino", COMUNADESTINO: "comuna_destino",
   REFERENCIA: "fuente_ref", REFERENCIAFUENTE: "fuente_ref", MOTIVO: "motivo_precio", TIPOFUENTE: "fuente", FUENTE: "fuente",
+  TIPODETRATAMIENTO: "tratamiento", TRATAMIENTOS: "tratamiento", DESTRUCCIONDEMARCA: "incluye_destruccion_marca", CANTIDADMINIMA: "cantidad_min", CANTIDADMAXIMA: "cantidad_max",
+  VIGENCIA: "vigente_hasta", VIGENTE: "vigente_hasta", PORCONFIRMAR: "por_confirmar", VALORAGREGADO: "valor_agregado",
   INCLUYETRANSPORTE: "incluye_transporte", INCLUYEDISPOSICION: "incluye_disposicion" // planillas anteriores: se deduce el tipo de servicio
 };
 const IMP_LISTAS = ["residuo", "contenedor", "comuna", "sucursal"];
@@ -114,7 +122,7 @@ function filasALineas(filas) {
     campos.forEach((c, j) => {
       if (!c) return;
       let v = f[j];
-      if (c === "fecha") v = fechaIso(v);
+      if (c === "fecha" || c === "vigente_hasta") v = fechaIso(v);
       else if (typeof v !== "number") v = String(v == null ? "" : v).trim();
       if (IMP_LISTAS.includes(c) && /;/.test(v)) v = v.split(";").map(x => x.trim()).filter(Boolean);
       if (v !== "") l[c] = v;
@@ -156,25 +164,28 @@ function validarImportada(d) {
   return e;
 }
 
-function claveCarga(t) {
+function claveCarga(t, sinTratamiento) {
   const tipo = String(t.tipo || t.tipo_transaccion || "").toLowerCase() === "paga" ? "paga" : "cobra";
   const prov = tget(t, "proveedor_id") || "n:" + norm(t.proveedor_nombre);
-  return [prov, norm(t.cliente), norm(t.sucursal), t.sucursal ? "" : norm(t.comuna), norm(t.residuo), norm(t.unidad), contKey(t), tipo].join("|") + (servicioClave(t) ? "|" + servicioClave(t) : "");
+  return [prov, norm(t.cliente), norm(t.sucursal), t.sucursal ? "" : norm(t.comuna), norm(t.residuo), norm(t.unidad), contKey(t), tipo].join("|") + (servicioClave(t) ? "|" + servicioClave(t) : "") +
+    (sinTratamiento ? "" : "|t:" + norm(tget(t, "tratamiento"))); // el tratamiento separa tarifas (Q7c)
 }
 
 const CAMPOS_COMPARAR = ["precio", "moneda", "fecha", "tipo_servicio", "cantidad_min", "cantidad_max", "estado_servicio", "detalle", "direccion", "comuna", "region", "fuente", "pdf_url",
-  "volumen_m3", "motivo_precio", "fuente_ref", "destino", "comuna_destino", "condicion_pago_dias"];
+  "volumen_m3", "motivo_precio", "fuente_ref", "destino", "comuna_destino", "condicion_pago_dias",
+  "tratamiento", "incluye_destruccion_marca", "carga_unidad", "vigente_hasta", "por_confirmar", "valor_agregado"];
 
 /** Nuevas / se actualizan (solo campos que traen valor y cambian) / iguales, contra las tarifas activas. */
 function planificarCarga(lista) {
-  const porClave = {};
+  const porClave = {}, sinTrat = {};
+  const poner = (m, k, t) => { const prev = m[k]; if (!prev || tget(t, "fecha") > tget(prev, "fecha")) m[k] = t; }; // la vigente
   TARIFAS.filter(t => t.activo).forEach(t => {
-    const k = claveCarga(t), prev = porClave[k];
-    if (!prev || tget(t, "fecha") > tget(prev, "fecha")) porClave[k] = t; // la vigente
+    poner(porClave, claveCarga(t), t);
+    if (!tget(t, "tratamiento")) poner(sinTrat, claveCarga(t, true), t); // las antiguas sin tratamiento se actualizan y lo completan
   });
   const plan = { crear: [], editar: [], iguales: [] }, usadas = {};
   lista.forEach(d => {
-    const t = porClave[claveCarga(d)];
+    const t = porClave[claveCarga(d)] || (tget(d, "tratamiento") ? sinTrat[claveCarga(d, true)] : null);
     if (!t || usadas[t.id]) { plan.crear.push(d); return; }
     // precio más antiguo que el vigente (llegó después): tarifa propia, que queda como anterior; no pisa la vigente
     if (d.fecha && String(d.fecha).slice(0, 10) < tget(t, "fecha").slice(0, 10)) { d._anterior = t.id; plan.crear.push(d); return; }
@@ -276,6 +287,7 @@ function vistaImportacionHtml() {
   const sinProv = unicosOrdenados(plan.crear.concat(plan.editar.map(e => e.d)).filter(d => !d.proveedor_id).map(d => d.proveedor_nombre));
   const sucNuevas = unicosOrdenados(plan.crear.filter(d => d._sucursal_nueva).map(d => d.cliente + " · " + d.sucursal));
   const sinPrecio = plan.crear.filter(d => d.precio == null).length;
+  const tratNuevos = unicosOrdenados(plan.crear.concat(plan.editar.map(e => e.d)).filter(d => d._tratamiento_nuevo).map(d => d.residuo + " → " + d.tratamiento));
   const fila = (accion, d, e) => {
     let precio = precioHtml(prepararTarifa(Object.assign({ id: "nuevo", activo: "si" }, d)));
     if (e && "precio" in e.cambios) precio = '<span class="muted">' + esc(e.antes.precio == null ? "sin precio" : fmtNum(e.antes.precio)) + ' →</span> ' + precio;
@@ -283,7 +295,7 @@ function vistaImportacionHtml() {
     return '<tr><td><span class="pill imp-' + accion.toLowerCase() + '">' + accion + '</span></td>' +
       '<td>' + esc(d.proveedor_nombre) + (d.proveedor_id ? "" : ' <span class="t-alerta">no está en ClickUp</span>') + '</td>' +
       '<td>' + empresaHtml(d) + (d._sucursal_doc ? '<div class="muted small">en el archivo: ' + esc(d._sucursal_doc) + '</div>' : "") + '</td>' +
-      '<td>' + esc(d.residuo) + '<div class="muted small">' + esc([d.tipo_servicio, d.contenedor].filter(Boolean).join(" · ")) + '</div></td>' +
+      '<td>' + esc(d.residuo) + '<div class="muted small">' + esc([d.tipo_servicio, d.contenedor, d.tratamiento].filter(Boolean).join(" · ")) + '</div>' + (d._tratamiento_nuevo ? '<div class="small warn">tratamiento nuevo para este residuo: se agregaría</div>' : '') + '</td>' +
       '<td>' + esc(d.comuna || "-") + '</td><td class="num">' + precio + (otros.length ? '<div class="muted small">cambia: ' + esc(otros.join(", ")) + '</div>' : "") + '</td></tr>';
   };
   const filas = plan.editar.map(e => fila("Actualiza", e.d, e)).concat(plan.crear.map(d => fila(d._anterior ? "Anterior" : "Nueva", d)));
@@ -295,6 +307,7 @@ function vistaImportacionHtml() {
     (sinProv.length ? '<p class="warn small">No están en ClickUp (se guardan solo con el nombre; crea su ficha después y quedan ligadas): ' + esc(sinProv.join(", ")) + '</p>' : "") +
     (sucNuevas.length ? '<p class="warn small">Sucursales que no están registradas (esas tarifas no se guardan; regístralas en Sucursales o corrige el nombre): ' + esc(sucNuevas.join(", ")) + '</p>' : "") +
     (sinPrecio ? '<p class="warn small">' + sinPrecio + ' tarifa(s) nuevas sin precio.</p>' : "") +
+    (tratNuevos.length ? '<p class="warn small">Tratamientos que no están para su residuo y se agregarían: ' + esc(tratNuevos.join(" · ")) + '</p>' : "") +
     (errores.length ? '<details class="small" open><summary class="warn">Filas con error</summary><ul>' + errores.slice(0, 100).map(x => '<li>' + (x.d._fila ? "Fila " + x.d._fila + ": " : "") + esc([x.d.proveedor_nombre, x.d.sucursal, x.d.residuo].filter(Boolean).join(" · ")) + " — " + esc(x.e.join("; ")) + '</li>').join("") + '</ul></details>' : "") +
     (filas.length ? '<div class="tscroll"><table class="ttar"><tr><th></th><th>Proveedor</th><th>Empresa / sucursal</th><th>Servicio</th><th>Comuna</th><th>Precio</th></tr>' + filas.slice(0, IMP_MAX_FILAS_VISTA).join("") + '</table></div>' +
       (filas.length > IMP_MAX_FILAS_VISTA ? '<p class="muted small">Se muestran ' + IMP_MAX_FILAS_VISTA + ' de ' + filas.length + ' filas.</p>' : "") : "") +

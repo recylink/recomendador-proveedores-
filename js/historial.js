@@ -10,7 +10,7 @@
    Depende de js/tarifas.js (TARIFAS, HISTORIAL_GID, filasAObjetos, unicosOrdenados…).
    ============================================================ */
 
-let HIS = { residuo: "", servicio: "", unidad: "", region: "", prov: "", moneda: "UF", bajas: false };
+let HIS = { residuo: "", servicio: "", unidad: "", region: "", prov: "", moneda: "UF", bajas: false, trat: "" };
 let HIS_PREVIOS = null;   // valores previos del Historial (se leen una vez)
 let HIS_PREVIOS_ERR = "";
 const UF_DIA = {};        // "2026-10-21" -> valor UF
@@ -40,7 +40,10 @@ async function cargarUFAnio(anio) {
   }
   UF_ANIOS[anio] = (async () => {
     try {
-      const j = await (await fetch(UF_API + "/" + anio)).json();
+      // mindicador a veces no responde: a los 8 s se sigue con el caché o con la UF del día (si no, la vista quedaba cargando)
+      const ctrl = new AbortController(), corte = setTimeout(() => ctrl.abort(), 8000);
+      let j;
+      try { j = await (await fetch(UF_API + "/" + anio, { signal: ctrl.signal })).json(); } finally { clearTimeout(corte); }
       const serie = {};
       (j.serie || []).forEach(x => { serie[String(x.fecha).slice(0, 10)] = x.valor; });
       Object.assign(UF_DIA, serie);
@@ -74,7 +77,8 @@ async function cargarPreviosHistorial() {
 /** Todos los puntos posibles (antes de filtrar por residuo, servicio, etc.). */
 function puntosHistorial() {
   const base = t => ({ t, prov: t.proveedor_nombre, provKey: t.provKey, residuo: t.residuo, servicio: t.tipo_servicio, tipo: t.tipo,
-    region: t.region || "", empresa: t.cliente, sucursal: t.sucursal, fuente: t.fuente || "", motivo: tget(t, "motivo_precio"), ufGuardada: numDe(t.valor_uf) });
+    region: t.region || "", empresa: t.cliente, sucursal: t.sucursal, fuente: t.fuente || "", motivo: tget(t, "motivo_precio"), ufGuardada: numDe(t.valor_uf),
+    trat: tget(t, "tratamiento") || SIN_TRAT });
   const out = [];
   TARIFAS.filter(t => (t.activo || HIS.bajas) && t.precio_num != null && t.precio_num > 1 && tget(t, "fecha") && t.unidad).forEach(t => {
     out.push(Object.assign(base(t), { fecha: tget(t, "fecha").slice(0, 10), precio: t.precio_num, moneda: t.moneda, unidad: t.unidad,
@@ -132,6 +136,10 @@ function renderHistorialPrecios() {
   const p2 = p1.filter(p => p.servicio === HIS.servicio), cUni = conteo(p2, "unidad");
   if (!cUni[HIS.unidad]) HIS.unidad = masFrecuente(p2.map(p => p.unidad));
   let p3 = p2.filter(p => p.unidad === HIS.unidad);
+  // tratamiento (solo en servicios con disposición o compra): no se mezclan precios de tratamientos distintos si se elige uno
+  const conTr = conTratamiento(HIS.servicio), cTrat = conTr ? conteo(p3, "trat") : {};
+  if (!conTr || (HIS.trat && !cTrat[HIS.trat])) HIS.trat = "";
+  if (HIS.trat) p3 = p3.filter(p => p.trat === HIS.trat);
   // "cobra" y "paga" no se mezclan: manda el que tenga más puntos
   const paga = p3.filter(p => p.tipo === "paga").length > p3.length / 2;
   p3 = p3.filter(p => (p.tipo === "paga") === paga);
@@ -153,6 +161,7 @@ function renderHistorialPrecios() {
       '<label>Residuo' + sel("hisRes", opc(cRes), HIS.residuo, "HIS.residuo=this.value;renderHistorialPrecios()") + '</label>' +
       '<label>Tipo de servicio' + sel("hisServ", opc(cServ), HIS.servicio, "HIS.servicio=this.value;renderHistorialPrecios()") + '</label>' +
       '<label>Unidad' + sel("hisUni", opc(cUni), HIS.unidad, "HIS.unidad=this.value;renderHistorialPrecios()") + '</label>' +
+      (conTr ? '<label>Tratamiento' + sel("hisTrat", [{ v: "", txt: "Todos" }].concat(opc(cTrat)), HIS.trat, "HIS.trat=this.value;renderHistorialPrecios()") + '</label>' : '') +
       '<label>Región' + sel("hisReg", [{ v: "", txt: "Todas" }].concat(opc(cReg)), HIS.region, "HIS.region=this.value;renderHistorialPrecios()") + '</label>' +
       '<label>Proveedor' + sel("hisProv", [{ v: "", txt: "Todos" }].concat(opc(cProv4)), HIS.prov, "HIS.prov=this.value;renderHistorialPrecios()") + '</label>' +
       '<div class="cmp-toggle" role="group" aria-label="Moneda del eje"><button type="button" class="' + (HIS.moneda === "UF" ? "on" : "") + '" onclick="HIS.moneda=\'UF\';renderHistorialPrecios()">UF</button><button type="button" class="' + (HIS.moneda === "CLP" ? "on" : "") + '" onclick="HIS.moneda=\'CLP\';renderHistorialPrecios()">Pesos</button></div>' +

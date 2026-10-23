@@ -32,7 +32,11 @@ function confianzaDe(ts) {
   const ultima = ts.map(t => tget(t, "fecha")).sort().pop() || "";
   const hace12 = new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10);
   if (ultima && ultima < hace12) p -= 1;
-  return p >= 2.5 ? { nivel: "alta", txt: "Confianza alta" } : p >= 1.5 ? { nivel: "media", txt: "Confianza media" } : { nivel: "baja", txt: "Confianza baja" };
+  const conf = ts.some(porConfirmar);
+  if (conf) p -= 1;
+  const r = p >= 2.5 ? { nivel: "alta", txt: "Confianza alta" } : p >= 1.5 ? { nivel: "media", txt: "Confianza media" } : { nivel: "baja", txt: "Confianza baja" };
+  if (conf) r.txt += " · por confirmar";
+  return r;
 }
 const mesAnio = f => { const s = String(f || ""); return s.length >= 7 ? s.slice(5, 7) + "-" + s.slice(0, 4) : ""; };
 /** "Mediana de 14 tarifas en la RM · 14 contratos de clientes · motivo: acuerdo marco · de 10-2026". */
@@ -64,7 +68,14 @@ function costosM3(ts) {
     (grupos[k] = grupos[k] || []).push(t);
   });
   const out = [];
-  Object.values(grupos).forEach(gTodas => {
+  // Q7c: los precios de un mismo proveedor con tratamientos distintos nunca se mezclan (una entrada por tratamiento)
+  const porTratamiento = gTodas => {
+    const trat = t => tget(t, "tratamiento") || SIN_TRAT;
+    const trats = unicosOrdenados(gTodas.filter(t => conTratamiento(t.tipo_servicio)).map(trat));
+    if (trats.length <= 1) return [[gTodas, trats[0] && trats[0] !== SIN_TRAT ? trats[0] : ""]];
+    return trats.map(tr => [gTodas.filter(t => !conTratamiento(t.tipo_servicio) || norm(trat(t)) === norm(tr)), tr === SIN_TRAT ? "" : tr]);
+  };
+  Object.values(grupos).flatMap(porTratamiento).forEach(([gTodas, tratamiento]) => {
     // lo que el proveedor paga por el material (compra) se muestra aparte, en verde; no entra al costo
     const g = gTodas.filter(t => t.tipo !== "paga"), pagas = gTodas.filter(t => t.tipo === "paga" && clpDe(t) != null);
     if (!g.length) return;
@@ -108,7 +119,9 @@ function costosM3(ts) {
       // si además viene el costo por m³ informado, se usa solo como referencia (no se suma)
       if (tdM3 && !usadas.includes(tdM3)) usadas.push(tdM3);
       // peoneta, faena, hidrojet: se cobran aparte en cada viaje, así que se suman al retiro
-      if (c.vol) g.filter(t => SERVICIOS_POR_VIAJE.includes(t.tipo_servicio) && ["servicio", "viaje", "retiro"].includes(String(t.unidad || "").toLowerCase()) && mismo(t) && clpDe(t) != null)
+      // destrucción de marca solo si se cobra por camión (viaje o retiro): un cargo fijo por servicio no se reparte por viaje
+      const unidadesPorViaje = t => t.tipo_servicio === "Destrucción de marca" ? ["viaje", "retiro"] : ["servicio", "viaje", "retiro"];
+      if (c.vol) g.filter(t => SERVICIOS_POR_VIAJE.includes(t.tipo_servicio) && unidadesPorViaje(t).includes(String(t.unidad || "").toLowerCase()) && mismo(t) && clpDe(t) != null)
         .forEach(t => {
           const v = clpDe(t);
           op += v / c.vol; usadas.push(t);
@@ -122,7 +135,7 @@ function costosM3(ts) {
       }
       const t0 = usadas[0];
       out.push({ provKey: t0.provKey, proveedor: t0.proveedor_nombre, cliente: t0.cliente, sucursal: t0.sucursal || t0.comuna, residuo: t0.residuo,
-        region: t0.region || regionDeComuna(t0.comuna) || "", cont: c.cont, vol: c.vol, op, conArr, lineas, tarifas: usadas, dens, pago: tget(t0, "condicion_pago_dias"), compra });
+        region: t0.region || regionDeComuna(t0.comuna) || "", cont: c.cont, vol: c.vol, op, conArr, lineas, tarifas: usadas, dens, pago: tget(t0, "condicion_pago_dias"), compra, tratamiento });
     });
   });
   return out;
@@ -162,12 +175,12 @@ function referencialRegiones(ts) {
   const usadas = new Set(items.flatMap(i => i.tarifas.map(t => t.id)));
   // 1) costo por m³ por residuo × región
   const g = {};
-  items.forEach(i => { const k = claveM3(i); (g[k] = g[k] || []).push(i); });
+  items.forEach(i => { const k = claveM3(i) + "|t:" + norm(i.tratamiento); (g[k] = g[k] || []).push(i); });
   Object.keys(g).forEach(k => {
-    const l = g[k], i0 = l[0], mk = mercado().m3[k];
+    const l = g[k], i0 = l[0], mk = mercado().m3[claveM3(i0)];
     const conts = {}; l.forEach(i => { const c = i.cont + " " + fmtNum(i.vol, 2) + " m³"; conts[c] = (conts[c] || 0) + 1; });
     const ts2 = l.flatMap(i => i.tarifas);
-    filas.push({ tipo: "m3", residuo: i0.residuo, servicio: "Transporte + disposición", region: i0.region,
+    filas.push({ tipo: "m3", residuo: i0.residuo, servicio: "Transporte + disposición", region: i0.region, tratamiento: i0.tratamiento,
       contenedor: Object.keys(conts).sort((a, b) => conts[b] - conts[a]).join(", "),
       valor: mediana(l.map(i => i.op)), conArr: mediana(l.map(i => i.conArr).filter(v => v != null)),
       mercado: mk && mk.n > 0 ? mk : null, porQue: porQueTexto(ts2, l.length, i0.region, "sucursal"),
@@ -175,15 +188,15 @@ function referencialRegiones(ts) {
   });
   // 2) por unidad: lo que no entró al costo por m³ (fijadas, compra de material, sin volumen…)
   const pu = {};
-  ts.filter(t => t.activo && t.vigente && !usadas.has(t.id)).forEach(t => { const k = claveUnidad(t); (pu[k] = pu[k] || []).push(t); });
+  ts.filter(t => t.activo && t.vigente && !usadas.has(t.id)).forEach(t => { const k = claveUnidad(t) + "|t:" + norm(tget(t, "tratamiento")); (pu[k] = pu[k] || []).push(t); });
   Object.keys(pu).forEach(k => {
     const l = pu[k], gen = l.filter(esGeneral), base = gen.length ? gen : l, t0 = base[0];
     const vals = base.map(clpDe).filter(v => v != null && v > 1);
     const genT = gen.slice().sort((a, b) => String(b.fecha + b.actualizado_el).localeCompare(String(a.fecha + a.actualizado_el)))[0];
     const fijada = genT && clpDe(genT) != null ? clpDe(genT) : null;
     const valor = fijada != null ? fijada : mediana(vals);
-    const mk = mercado().unid[k];
-    filas.push({ tipo: "unidad", residuo: t0.residuo || "(sin residuo)", servicio: t0.tipo_servicio, region: t0.region || "", unidad: t0.unidad, paga: t0.tipo === "paga",
+    const mk = mercado().unid[claveUnidad(t0)];
+    filas.push({ tipo: "unidad", residuo: t0.residuo || "(sin residuo)", servicio: t0.tipo_servicio, region: t0.region || "", unidad: t0.unidad, paga: t0.tipo === "paga", tratamiento: tget(t0, "tratamiento"),
       contenedor: unicosOrdenados(l.map(contenedorTxt)).join(", "), valor, mercado: mk && mk.n > 0 ? mk : null, genId: genT ? genT.id : "", t0,
       porQue: genT ? "Fijada por " + String(tget(genT, "actualizado_por") || tget(genT, "creado_por")).replace(/@.*/, "") + " el " + String(tget(genT, "actualizado_el") || genT.fecha).slice(0, 10) +
         (tget(genT, "motivo_precio") ? " · motivo: " + genT.motivo_precio.toLowerCase() : "") + (tget(genT, "detalle") ? " · " + String(genT.detalle).replace(/\s+/g, " ").slice(0, 120) : "")
@@ -236,7 +249,8 @@ function referencialRegionHtml(ts, opts) {
   if (!filas.length && !sinTar.length) return '<div class="ref-box">' + cab + (opts.proveedor && !opts.soloConPrecio ? '<div class="sec-acc">' + botonNuevaReferencial(opts.proveedor) + '</div>' : '<div class="muted small">Sin tarifas.</div>') + '</div>';
   const uf = UF.valor ? " · UF del día " + fmtCLP(UF.valor) : "";
   const fila = f => {
-    const resTxt = '<b>' + esc(f.residuo) + '</b>' + (f.paga ? ' <span class="pill p-paga">paga</span>' : '') + '<div class="muted small">' + esc(f.tipo === "m3" ? "Costo operativo: transporte + disposición" : f.servicio || "-") + '</div>';
+    const resTxt = '<b>' + esc(f.residuo) + '</b>' + (f.paga ? ' <span class="pill p-paga">paga</span>' : '') + '<div class="muted small">' + esc(f.tipo === "m3" ? "Costo operativo: transporte + disposición" : f.servicio || "-") + '</div>' +
+      (f.tratamiento ? '<div class="small t-trat">' + esc(f.tratamiento + (familiaDe(f.tratamiento) ? " · " + familiaDe(f.tratamiento) : "")) + '</div>' : '');
     let precio;
     if (f.tipo === "m3") {
       precio = '<div class="ref-num">' + fmtCLP(f.valor) + ' <span class="muted small">/ m³</span></div>' +
@@ -261,7 +275,18 @@ function referencialRegionHtml(ts, opts) {
 }
 
 /* ---------------- comparar proveedores en una región ---------------- */
-let CMP = { provs: [], modo: "m3", residuo: "", region: "", tipos: [], vols: [], arriendo: false, servicio: "", unidad: "" }; // tipos/vols vacío = todos
+let CMP = { provs: [], modo: "m3", residuo: "", region: "", tipos: [], vols: [], arriendo: false, servicio: "", unidad: "", fams: [], trat: "" }; // tipos/vols/fams vacío = todos
+/** Filtro de tratamiento (Q7c/Q12): familias elegidas (una, varias o todas) y un tratamiento específico. */
+const pasaTratamiento = tr => (!CMP.fams.length || CMP.fams.includes(familiaDe(tr) || SIN_TRAT)) && (!CMP.trat || norm(tr) === norm(CMP.trat));
+/** Chips de familia + selector de tratamiento, con los tratamientos que hay para el residuo en la región. */
+function filtrosTratamientoHtml(trats) {
+  const lista = unicosOrdenados(trats.filter(Boolean));
+  if (CMP.trat && !lista.some(t => norm(t) === norm(CMP.trat))) CMP.trat = "";
+  return chipsCmp("Familia de tratamiento", "fams", FAMILIAS.concat([SIN_TRAT]), x => x) +
+    '<label>Tratamiento<select id="cmpTrat" onchange="CMP.trat=this.value;renderComparar()"><option value="">Todos</option>' +
+      lista.map(t => '<option value="' + esc(t) + '"' + (norm(t) === norm(CMP.trat) ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select></label>';
+}
+const tratSubHtml = tr => tr ? '<div class="small t-trat">' + esc(tr + (familiaDe(tr) ? " · " + familiaDe(tr) : "")) + '</div>' : '';
 function abrirComparar(on) { abrirVistaTar(on ? "cmp" : "lista"); } // la vista Historial de precios está en js/historial.js
 /** Suma o quita un contenedor de la comparación (ninguno elegido = todos). */
 function cmpCont(campo, c) { CMP[campo] = CMP[campo].includes(c) ? CMP[campo].filter(x => x !== c) : CMP[campo].concat([c]); renderComparar(); }
@@ -358,7 +383,7 @@ function cmpTarifasTabla(ts) {
   return '<div class="tscroll"><table class="ttar cmp-det-tab"><tr><th>Empresa · sucursal</th><th>Servicio · contenedor</th><th class="num">Precio</th><th>Fecha</th><th>Fuente · motivo</th><th>Destino</th></tr>' +
     ts.slice().sort((a, b) => String(a.cliente + a.sucursal).localeCompare(String(b.cliente + b.sucursal), "es") || String(a.tipo_servicio).localeCompare(String(b.tipo_servicio), "es")).map(t =>
       '<tr><td>' + (esGeneral(t) ? '<span class="muted">Valor general</span>' : esc([t.cliente, t.sucursal].filter(Boolean).join(" · ") || "-")) + '<div class="muted small">' + esc(t.comuna || "") + '</div></td>' +
-      '<td>' + esc(t.tipo_servicio || "-") + '<div class="muted small">' + esc(contenedorTxt(t) || "") + '</div></td>' +
+      '<td>' + esc(t.tipo_servicio || "-") + '<div class="muted small">' + esc(contenedorTxt(t) || "") + '</div>' + tratSubHtml(tget(t, "tratamiento")) + marcasV3Html(t) + '</td>' +
       '<td class="num">' + precioHtml(t) + '</td><td class="small">' + esc(t.fecha || "-") + '</td>' +
       '<td class="small">' + esc([t.fuente, tget(t, "fuente_ref")].filter(Boolean).join(" · ") || "-") + (tget(t, "motivo_precio") ? '<div class="muted small">' + esc(t.motivo_precio) + '</div>' : '') +
         (t.pdf_url ? '<a href="' + esc(t.pdf_url) + '" target="_blank" rel="noopener">PDF ↗</a>' : '') + '</td>' +
@@ -384,7 +409,7 @@ function cmpDetalleHtml(o) {
       '<tr id="' + id + '" style="display:none" class="desg-fila"><td colspan="6">' + desgloseHtml(it) + '</td></tr>';
   }).join('') : '';
   const his = esc(JSON.stringify({ prov: o.nombre, residuo: o.residuo, region: o.region, servicio: o.servicio || "", unidad: o.unidad || "" }));
-  return '<div class="cmp-detalle" data-cmp-det="' + esc(o.provKey) + '">' +
+  return '<div class="cmp-detalle" data-cmp-det="' + esc(o.clave || o.provKey) + '">' +
     '<div class="cmp-det-cab">' + contactoCortoTarifa(o.tarifas[0]) + '<div class="cmp-det-acc">' +
       '<button type="button" class="lnk" onclick="cmpVerHistorial(' + his + ')">Historial de precios</button>' +
       (typeof abrirEditarTarifas === "function" ? '<button type="button" class="lnk" onclick="abrirEditarTarifas(' + esc(JSON.stringify(o.nombre)) + ')">Editar tarifas</button>' : '') + '</div></div>' +
@@ -403,7 +428,9 @@ function renderCompararUnidad(box) {
   const t1 = ts.filter(t => t.residuo === CMP.residuo && t.region === CMP.region);
   const servicios = unicosOrdenados(t1.map(t => t.tipo_servicio).filter(Boolean));
   if (!servicios.includes(CMP.servicio)) CMP.servicio = servicios[0] || "";
-  const t2 = t1.filter(t => t.tipo_servicio === CMP.servicio);
+  const t2Todos = t1.filter(t => t.tipo_servicio === CMP.servicio);
+  const conTr = conTratamiento(CMP.servicio);
+  const t2 = conTr ? t2Todos.filter(t => pasaTratamiento(tget(t, "tratamiento"))) : t2Todos;
   const provPorUni = {};
   t2.forEach(t => (provPorUni[t.unidad] = provPorUni[t.unidad] || new Set()).add(t.provKey));
   const unidades = unicosOrdenados(t2.map(t => t.unidad));
@@ -412,10 +439,11 @@ function renderCompararUnidad(box) {
   const del = t2.filter(t => t.unidad === CMP.unidad);
   const paga = del.length ? del.filter(t => t.tipo === "paga").length > del.length / 2 : CMP.servicio === "Compra de material";
   const porProv = {};
-  del.filter(t => (t.tipo === "paga") === paga).forEach(t => (porProv[t.provKey] = porProv[t.provKey] || []).push(t));
-  let provs = Object.values(porProv).map(l => {
+  // un proveedor con tratamientos distintos da una fila por tratamiento (Q7c)
+  del.filter(t => (t.tipo === "paga") === paga).forEach(t => { const k = t.provKey + "|t:" + norm(tget(t, "tratamiento")); (porProv[k] = porProv[k] || []).push(t); });
+  let provs = Object.entries(porProv).map(([clave, l]) => {
     const gen = l.filter(esGeneral), base = gen.length ? gen : l, vals = base.map(clpDe);
-    return { nombre: l[0].proveedor_nombre, provKey: l[0].provKey, tarifas: l, n: l.length, v: mediana(vals), min: Math.min(...vals), max: Math.max(...vals), fijada: !!gen.length,
+    return { nombre: l[0].proveedor_nombre, provKey: l[0].provKey, clave, tratamiento: tget(l[0], "tratamiento"), tarifas: l, n: l.length, v: mediana(vals), min: Math.min(...vals), max: Math.max(...vals), fijada: !!gen.length,
       empresas: unicosOrdenados(l.map(t => t.cliente).filter(Boolean)).join(", "), conf: confianzaDe(base),
       fuente: unicosOrdenados(l.map(t => t.fuente).filter(Boolean)).join(", ") + (unicosOrdenados(l.map(t => tget(t, "motivo_precio")).filter(Boolean)).length ? " · " + unicosOrdenados(l.map(t => tget(t, "motivo_precio")).filter(Boolean)).join(", ").toLowerCase() : "") };
   }).sort((a, b) => paga ? b.v - a.v : a.v - b.v);
@@ -429,6 +457,7 @@ function renderCompararUnidad(box) {
       selRegRes(rr) +
       '<label>Tipo de servicio' + sel("cmpServ", servicios, CMP.servicio, "CMP.servicio=this.value;renderComparar()") + '</label>' +
       '<label>Unidad' + selConteo("cmpUni", opcUni, CMP.unidad, "CMP.unidad=this.value;renderComparar()") + '</label>' +
+      (conTr ? filtrosTratamientoHtml(t2Todos.map(t => tget(t, "tratamiento"))) : '') +
     '</div>' +
     (!provs.length ? '<div class="empty">Sin tarifas para ' + esc(CMP.residuo) + ' · ' + esc(CMP.servicio) + ' por ' + esc(CMP.unidad) + ' en ' + esc(CMP.region || "esta región") + '.</div>' :
     '<div class="cmp-box"><div class="cmp-cab"><b>' + esc(paga ? "Lo que paga el proveedor" : "Lo que cobra el proveedor") + ' · ' + esc(CMP.residuo) + ' · ' + esc(CMP.servicio) + u + '</b>' +
@@ -437,15 +466,15 @@ function renderCompararUnidad(box) {
       (unidades.length > 1 ? '<div class="muted small">Solo se comparan precios en la misma unidad. Este servicio también tiene tarifas por ' + esc(unidades.filter(u => u !== CMP.unidad).map(u => u + " (" + provPorUni[u].size + ")").join(", ")) + ': cámbialo en Unidad.</div>' : '') +
       provs.map((p, i) => {
         const dif = merc ? (p.v - merc) / merc : 0, bueno = paga ? dif > 0 : dif < 0;
-        return '<div class="cmp-fila"><div>' + cmpNombreHtml(p.nombre, p.provKey, true) + '<div class="muted small">' + p.n + ' tarifa' + (p.n > 1 ? 's' : '') + (p.fijada ? ' · fijada' : '') + ' · ' + esc(p.conf.txt.toLowerCase()) + '</div></div>' +
+        return '<div class="cmp-fila"><div>' + cmpNombreHtml(p.nombre, p.clave, true) + tratSubHtml(p.tratamiento) + '<div class="muted small">' + p.n + ' tarifa' + (p.n > 1 ? 's' : '') + (p.fijada ? ' · fijada' : '') + ' · ' + esc(p.conf.txt.toLowerCase()) + '</div></div>' +
           '<div class="cmp-barra"><div class="cmp-val' + (i === 0 ? ' mejor' : '') + '" style="width:' + pct(p.v) + '"></div><div class="cmp-merc" style="left:' + pct(merc) + '" title="Precio de mercado"></div></div>' +
           '<div class="num"><b>' + fmtCLP(p.v) + '</b><span class="muted small">' + esc(u) + '</span><div class="small ' + (Math.abs(dif) < 0.005 ? "muted" : bueno ? "ok-msg" : "warn") + '">' + (Math.abs(dif) < 0.005 ? "igual al mercado" : Math.round(Math.abs(dif) * 100) + "% " + (dif < 0 ? "bajo" : "sobre") + " mercado") + '</div></div></div>';
       }).join('') +
       '<div class="cmp-fila cmp-eje"><div></div><div class="muted small">│ línea = precio de mercado</div><div></div></div>' +
       '<div class="tscroll"><table class="ttar"><tr><th>Proveedor</th><th class="num">Mediana' + esc(u) + '</th><th class="num">Mín – máx</th><th class="num">Tarifas</th><th>Empresas</th><th>Fuente · motivo</th></tr>' +
-        provs.map(p => '<tr><td>' + cmpNombreHtml(p.nombre, p.provKey) + '</td><td class="num"><b>' + fmtCLP(p.v) + '</b></td><td class="num">' + (p.min === p.max ? fmtCLP(p.min) : fmtCLP(p.min) + ' – ' + fmtCLP(p.max)) + '</td><td class="num">' + p.n + '</td>' +
+        provs.map(p => '<tr><td>' + cmpNombreHtml(p.nombre, p.clave) + tratSubHtml(p.tratamiento) + '</td><td class="num"><b>' + fmtCLP(p.v) + '</b></td><td class="num">' + (p.min === p.max ? fmtCLP(p.min) : fmtCLP(p.min) + ' – ' + fmtCLP(p.max)) + '</td><td class="num">' + p.n + '</td>' +
           '<td class="small">' + esc(p.empresas || "Valor general") + '</td><td class="small">' + esc(p.fuente) + '</td></tr>' +
-          (CMP_ABIERTOS.has(p.provKey) ? '<tr class="cmp-det-fila"><td colspan="6">' + cmpDetalleHtml({ provKey: p.provKey, nombre: p.nombre, residuo: CMP.residuo, region: CMP.region, items: null, tarifas: p.tarifas, servicio: CMP.servicio, unidad: CMP.unidad }) + '</td></tr>' : '')).join('') +
+          (CMP_ABIERTOS.has(p.clave) ? '<tr class="cmp-det-fila"><td colspan="6">' + cmpDetalleHtml({ provKey: p.provKey, clave: p.clave, nombre: p.nombre, residuo: CMP.residuo, region: CMP.region, items: null, tarifas: p.tarifas, servicio: CMP.servicio, unidad: CMP.unidad }) + '</td></tr>' : '')).join('') +
       '</table></div>' +
       '<div class="muted small">Mediana de las tarifas vigentes de cada proveedor en la región (si tiene una referencial fijada, manda esa). Precios en UF llevados a pesos con la UF del día.</div></div>');
 }
@@ -459,7 +488,8 @@ function renderComparar() {
   const universo = items.concat(compras.map(t => ({ residuo: t.residuo, region: t.region || regionDeComuna(t.comuna) || "", provKey: t.provKey })));
   const rr = regionYResiduo(universo);
   const volTxt = i => fmtNum(i.vol, 2);
-  const enReg = items.filter(i => i.residuo === CMP.residuo && i.region === CMP.region);
+  const enRegTodos = items.filter(i => i.residuo === CMP.residuo && i.region === CMP.region);
+  const enReg = enRegTodos.filter(i => pasaTratamiento(i.tratamiento));
   const tipos = unicosOrdenados(enReg.map(i => i.cont));
   CMP.tipos = CMP.tipos.filter(c => tipos.includes(c));
   const vols = [...new Set(enReg.filter(i => !CMP.tipos.length || CMP.tipos.includes(i.cont)).map(i => i.vol))].sort((a, b) => a - b).map(v => fmtNum(v, 2));
@@ -467,14 +497,15 @@ function renderComparar() {
   const sel = (id, opts, val, fn) => '<select id="' + id + '" onchange="' + fn + '">' + opts.map(o => '<option' + (o === val ? ' selected' : '') + '>' + esc(o) + '</option>').join('') + '</select>';
   const del = enReg; // todos los contenedores (el costo por contenedor está en la tabla)
   const porProv = {};
-  del.forEach(i => (porProv[i.provKey] = porProv[i.provKey] || []).push(i));
+  // un proveedor con tratamientos distintos da una fila por tratamiento (Q7c)
+  del.forEach(i => { const k = i.provKey + "|t:" + norm(i.tratamiento); (porProv[k] = porProv[k] || []).push(i); });
   const val = i => CMP.arriendo ? i.conArr : i.op;
-  let provs = Object.values(porProv).map(l => {
+  let provs = Object.entries(porProv).map(([clave, l]) => {
     const vs = l.map(val).filter(v => v != null);
     const comp = nombre => mediana(l.flatMap(i => i.lineas.filter(x => x.comp === nombre).map(x => x.porCont)).filter(v => v != null));
     const arr = l.flatMap(i => i.tarifas.filter(t => esServ(t, "Arriendo"))).map(clpDe).filter(v => v != null);
     const ts = l.flatMap(i => i.tarifas);
-    return { nombre: l[0].proveedor, provKey: l[0].provKey, items: l, tarifas: ts, n: l.length, v: vs.length ? mediana(vs) : null, op: mediana(l.map(i => i.op)), conArr: mediana(l.map(i => i.conArr).filter(v => v != null)),
+    return { nombre: l[0].proveedor, provKey: l[0].provKey, clave, tratamiento: l[0].tratamiento, items: l, tarifas: ts, n: l.length, v: vs.length ? mediana(vs) : null, op: mediana(l.map(i => i.op)), conArr: mediana(l.map(i => i.conArr).filter(v => v != null)),
       retiro: comp("Retiro (transporte)"), disp: mediana(l.flatMap(i => i.tarifas.filter(t => esServ(t, "Disposición")).map(clpDe))), arriendo: arr.length ? mediana(arr) : null,
       porCont: porContenedor(l), tipos: unicosOrdenados(l.map(i => i.cont)).join(", "), vols: [...new Set(l.map(i => i.vol))].sort((a, b) => a - b).map(v => fmtNum(v, 2)).join(", "), conf: confianzaDe(ts),
       fuente: unicosOrdenados(ts.map(t => t.fuente).filter(Boolean)).join(", ") + (unicosOrdenados(ts.map(t => tget(t, "motivo_precio")).filter(Boolean)).length ? " · " + unicosOrdenados(ts.map(t => tget(t, "motivo_precio")).filter(Boolean)).join(", ").toLowerCase() : "") };
@@ -482,7 +513,8 @@ function renderComparar() {
   const merc = mediana(provs.map(p => p.v));
   const todosProv = provs.map(p => p.nombre);
   const porComp = {};
-  compras.filter(t => t.residuo === CMP.residuo && (t.region || regionDeComuna(t.comuna)) === CMP.region && !porProv[t.provKey])
+  const conCosto = new Set(Object.values(porProv).map(l => l[0].provKey));
+  compras.filter(t => t.residuo === CMP.residuo && (t.region || regionDeComuna(t.comuna)) === CMP.region && !conCosto.has(t.provKey) && pasaTratamiento(tget(t, "tratamiento")))
     .forEach(t => (porComp[t.provKey] = porComp[t.provKey] || []).push(t));
   const compradores = Object.values(porComp).map(l => {
     const kg = l.filter(t => unidadEs(t, "kg")), base = kg.length ? kg : l, vals = base.map(clpDe);
@@ -495,27 +527,28 @@ function renderComparar() {
     '<div class="cmp-filtros">' + modoCmpHtml() +
       selRegRes(rr) +
       '<div class="cmp-toggle" role="group" aria-label="Qué costo comparar"><button type="button" class="' + (CMP.arriendo ? "" : "on") + '" onclick="CMP.arriendo=false;renderComparar()">Costo operativo</button><button type="button" class="' + (CMP.arriendo ? "on" : "") + '" onclick="CMP.arriendo=true;renderComparar()">Con arriendo</button></div>' +
+      filtrosTratamientoHtml(enRegTodos.map(i => i.tratamiento).concat(compras.filter(t => t.residuo === CMP.residuo).map(t => tget(t, "tratamiento")))) +
     '</div>' +
     (!provs.length && !compradores.length ? '<div class="empty">Sin proveedores con costo por m³ para ' + esc(CMP.residuo) + ' en ' + esc(CMP.region || "esta región") + (CMP.arriendo ? ' con arriendo' : '') + '.</div>' :
     '<div class="cmp-box">' + (provs.length ? '<div class="cmp-cab"><b>Costo por m³ con contenedor lleno · todos los contenedores</b><span><b>Precio de mercado en ' + esc(CMP.region) + ': ' + fmtCLP(merc) + ' / m³</b> <span class="muted">(mediana de ' + todosProv.length + ' proveedor' + (todosProv.length > 1 ? 'es' : '') + ')</span></span></div>'
       : '<div class="cmp-cab"><b>Nadie cobra por ' + esc(CMP.residuo) + ' en ' + esc(CMP.region) + ': solo hay compradores del material</b></div>') +
       provs.map((p, i) => {
         const dif = merc ? (p.v - merc) / merc : 0;
-        return '<div class="cmp-fila"><div>' + cmpNombreHtml(p.nombre, p.provKey, true) + '<div class="muted small">' + p.n + ' sucursal' + (p.n > 1 ? 'es' : '') + ' · ' + esc(p.conf.txt.toLowerCase()) + '</div></div>' +
+        return '<div class="cmp-fila"><div>' + cmpNombreHtml(p.nombre, p.clave, true) + tratSubHtml(p.tratamiento) + '<div class="muted small">' + p.n + ' sucursal' + (p.n > 1 ? 'es' : '') + ' · ' + esc(p.conf.txt.toLowerCase()) + '</div></div>' +
           '<div class="cmp-barra"><div class="cmp-val' + (i === 0 ? ' mejor' : '') + '" style="width:' + pct(p.v) + '"></div><div class="cmp-merc" style="left:' + pct(merc) + '" title="Precio de mercado"></div></div>' +
           '<div class="num"><b>' + fmtCLP(p.v) + '</b><div class="small ' + (Math.abs(dif) < 0.005 ? "muted" : dif < 0 ? "ok-msg" : "warn") + '">' + (Math.abs(dif) < 0.005 ? "igual al mercado" : Math.round(Math.abs(dif) * 100) + "% " + (dif < 0 ? "bajo" : "sobre") + " mercado") + '</div></div></div>';
       }).join('') +
       '<div class="cmp-fila cmp-eje"><div></div><div class="muted small">│ línea = precio de mercado</div><div></div></div>' +
       '<div class="tscroll"><table class="ttar cmp-tab"><tr><th>Proveedor</th><th>Contenedor</th><th class="num">m³</th><th class="num">Operativo / m³</th><th class="num">Mín – máx / m³</th>' +
         '<th class="num">Retiro</th><th class="num">Disposición</th><th class="num">Arriendo / mes</th><th class="num">Sucursales</th></tr>' +
-        provs.flatMap(p => p.porCont.map((c, j) => '<tr' + (j ? ' class="cmp-sub"' : '') + '><td>' + (j ? '' : cmpNombreHtml(p.nombre, p.provKey)) + '</td><td>' + esc(c.cont || "—") + '</td><td class="num">' + (c.vol ? fmtNum(c.vol, 2) : "—") + '</td>' +
+        provs.flatMap(p => p.porCont.map((c, j) => '<tr' + (j ? ' class="cmp-sub"' : '') + '><td>' + (j ? '' : cmpNombreHtml(p.nombre, p.clave) + tratSubHtml(p.tratamiento)) + '</td><td>' + esc(c.cont || "—") + '</td><td class="num">' + (c.vol ? fmtNum(c.vol, 2) : "—") + '</td>' +
           '<td class="num"><b>' + fmtCLP(c.op) + '</b></td><td class="num">' + (c.min === c.max ? fmtCLP(c.min) : fmtCLP(c.min) + ' – ' + fmtCLP(c.max)) + '</td>' +
           '<td class="num">' + (c.retiro != null ? fmtCLP(c.retiro) + (c.retiroConDisp ? '<div class="muted small">transporte + disposición' + (c.retiroCalc ? ' · ' + fmtNum(c.vol, 2) + ' m³ × costo por m³' : '') + '</div>' : '') : "—") +
             (c.porViaje != null ? '<div class="muted small">+ ' + fmtCLP(c.porViaje) + ' ' + esc(c.porViajeTxt) + ' por viaje</div>' : '') + '</td>' +
           '<td class="num">' + (c.disp != null ? fmtCLP(c.disp) + (c.dispUnidad ? ' <span class="muted small">/ ' + esc(c.dispUnidad) + '</span>' : '') : c.retiroConDisp ? '<span class="muted small">incluida en el retiro</span>' : (c.compra ? '' : "—")) +
             (c.compra ? '<div class="paga-txt">+' + fmtCLP(c.compra.valor) + ' / ' + esc(c.compra.unidad) + ' <span class="small">paga el proveedor</span></div>' : '') + '</td>' +
           '<td class="num">' + (c.arriendo != null ? fmtCLP(c.arriendo) : "—") + '</td><td class="num">' + c.n + '</td></tr>')
-          .concat(CMP_ABIERTOS.has(p.provKey) ? ['<tr class="cmp-det-fila"><td colspan="9">' + cmpDetalleHtml({ provKey: p.provKey, nombre: p.nombre, residuo: CMP.residuo, region: CMP.region, items: p.items, tarifas: p.tarifas }) + '</td></tr>'] : [])).join('') +
+          .concat(CMP_ABIERTOS.has(p.clave) ? ['<tr class="cmp-det-fila"><td colspan="9">' + cmpDetalleHtml({ provKey: p.provKey, clave: p.clave, nombre: p.nombre, residuo: CMP.residuo, region: CMP.region, items: p.items, tarifas: p.tarifas }) + '</td></tr>'] : [])).join('') +
         compradores.map(c => '<tr class="cmp-compra"><td>' + cmpNombreHtml(c.nombre, c.provKey) + '</td><td>—</td><td class="num">—</td>' +
           '<td class="num"><span class="muted small">no cobra</span></td><td class="num">—</td><td class="num">—</td>' +
           '<td class="num"><div class="paga-txt">+' + fmtCLP(c.valor) + ' / ' + esc(c.unidad) + '</div><div class="paga-txt small">compra de material</div>' +
@@ -523,5 +556,5 @@ function renderComparar() {
           '<td class="num">—</td><td class="num">' + c.n + '</td></tr>' +
           (CMP_ABIERTOS.has(c.provKey) ? '<tr class="cmp-det-fila"><td colspan="9">' + cmpDetalleHtml({ provKey: c.provKey, nombre: c.nombre, residuo: CMP.residuo, region: CMP.region, items: null, tarifas: c.tarifas, servicio: "Compra de material" }) + '</td></tr>' : '')).join('') +
       '</table></div>' +
-      '<div class="muted small">Cada proveedor se calcula por separado (nunca se mezcla el retiro de uno con la disposición de otro): la barra es la mediana de todas sus sucursales en la región; la tabla separa cada contenedor, con el rango entre sus sucursales. Los contenedores chicos cuestan más por m³. Peoneta, servicio de faena e hidrojet se cobran por viaje y se suman al retiro. El arriendo se prorratea con ' + RETIROS_MES + ' retiros al mes. Disposición por kg llevada a m³ con la densidad del residuo' + (densidadDe(CMP.residuo) ? ' (' + fmtNum(densidadDe(CMP.residuo).kgm3, 0) + ' kg/m³)' : '') + '.</div></div>');
+      '<div class="muted small">Cada proveedor se calcula por separado (nunca se mezcla el retiro de uno con la disposición de otro, ni dos tratamientos de un mismo proveedor): la barra es la mediana de todas sus sucursales en la región; la tabla separa cada contenedor, con el rango entre sus sucursales. Los contenedores chicos cuestan más por m³. Peoneta, servicio de faena e hidrojet se cobran por viaje y se suman al retiro. El arriendo se prorratea con ' + RETIROS_MES + ' retiros al mes. Disposición por kg llevada a m³ con la densidad del residuo' + (densidadDe(CMP.residuo) ? ' (' + fmtNum(densidadDe(CMP.residuo).kgm3, 0) + ' kg/m³)' : '') + '.</div></div>');
 }

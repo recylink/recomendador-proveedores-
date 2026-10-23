@@ -6,10 +6,11 @@
    - Lo usan el formulario, Nueva tarifa, Editar tarifas, Importar planilla y Pegar desde Claude.
    Depende de js/tarifas.js (CATS, esc, norm, tget, siNo, campo, inp, sel) y js/sinader.js.
    ============================================================ */
-const TIPOS_SERVICIO = ["Transporte", "Disposición", "Transporte + disposición", "Arriendo", "Compra de material", "Peoneta", "Servicio de faena", "Hidrojet"];
+const TIPOS_SERVICIO = ["Transporte", "Disposición", "Transporte + disposición", "Arriendo", "Compra de material", "Peoneta", "Servicio de faena", "Hidrojet", "Destrucción de marca"];
 // Peoneta, faena e hidrojet: servicios por viaje cobrados aparte del transporte (facturas Recycling–Abastible Talca, 2026-10-22)
 const TIPOS_BASE = TIPOS_SERVICIO.slice(0, 5);
-const SERVICIOS_POR_VIAJE = TIPOS_SERVICIO.slice(5); // se suman al retiro en el costo por m³
+// se suman al retiro en el costo por m³ (destrucción de marca solo si se cobra por camión: viaje o retiro)
+const SERVICIOS_POR_VIAJE = TIPOS_SERVICIO.slice(5);
 /** Tipo de servicio en la clave de duplicados, solo si no es de los básicos (peoneta y faena del mismo viaje son tarifas distintas). */
 const servicioClave = t => { const ts = tget(t, "tipo_servicio"); return ts && !canonDe(TIPOS_BASE, ts) ? norm(ts) : ""; };
 const TIPOS_CON_DESTINO = ["Transporte", "Disposición", "Transporte + disposición"];
@@ -26,7 +27,7 @@ const FUENTES_ANTERIORES = { cotizacion: "Cotizaciones de proveedores", "cotizac
 /** Listas con lo que se haya agregado con "Otra…" (catálogo del Sheet). */
 const tiposServicio = () => unicosOrdenados(TIPOS_SERVICIO.concat(CATS.tipo_servicio || [])).sort((a, b) => (TIPOS_SERVICIO.indexOf(a) + 1 || 99) - (TIPOS_SERVICIO.indexOf(b) + 1 || 99));
 const fuentesLista = () => (CATS.fuente && CATS.fuente.length ? CATS.fuente : TIPOS_FUENTE);
-const unidadesLista = () => CATS.unidad && CATS.unidad.length ? CATS.unidad : ["kg", "ton", "m3", "retiro", "viaje", "servicio", "mes", "tambor", "unidad", "hora"];
+const unidadesLista = () => CATS.unidad && CATS.unidad.length ? CATS.unidad : ["kg", "ton", "m3", "retiro", "viaje", "servicio", "mes", "tambor", "pallet", "unidad", "hora"];
 
 const canonDe = (lista, v) => { const k = norm(v); return k ? lista.find(x => norm(x) === k) || "" : ""; };
 function tipoServicioCanon(v) {

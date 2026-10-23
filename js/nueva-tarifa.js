@@ -50,7 +50,11 @@ function abrirNuevaTarifa(pre) {
         campo("n_pago", "Condición de pago (días) <span class=\"muted\">· vacío = Euro 120, resto 30</span>", inp("n_pago", "", 'inputmode="numeric"')) +
         campo("n_ref_comuna", "Comuna de origen de la referencial", inp("n_ref_comuna", "", 'list="ntComunaDL" autocomplete="off" placeholder="Si aplica a una comuna"')) +
         campo("n_ref_region", "…o región de origen", sel("n_ref_region", [["", "— elegir —"]].concat(Object.keys(REGIONES_COMUNAS).map(x => [x, x])), "")) +
+        campo("n_vigente", "Vigente hasta <span class=\"muted\">· opcional</span>", '<input id="n_vigente" type="date">') +
+        campo("n_carga", "Carga mínima – máxima <span class=\"muted\">· opcional</span>", '<div class="tf-dos">' + inp("n_carga_min", "", 'inputmode="decimal" placeholder="mín"') + inp("n_carga_max", "", 'inputmode="decimal" placeholder="máx"') + cargaUnidadSel("n_carga_unidad", "") + '</div>') +
+        campo("n_por_confirmar", "Dato por confirmar", '<label class="chk"><input type="checkbox" id="n_por_confirmar"> falta confirmar algún dato (baja la confianza)</label>') +
         campo("n_detalle", "Detalle del cobro (por qué cobra eso, condiciones)", '<textarea id="n_detalle" rows="2"></textarea>', "span2") +
+        campo("n_valor_agregado", "Valor agregado <span class=\"muted\">· CO₂ evitado, material recuperado, trazabilidad…</span>", '<textarea id="n_valor_agregado" rows="2"></textarea>', "span2") +
       '</div></details>' +
       '<div class="nt-adj-box"><div class="nt-adj-tit">PDF respaldo de la referencial <span class="muted small">· también sirve para las sucursales que no tengan uno propio para ese residuo</span></div><div id="n_adj_REF"></div></div></div>' +
 
@@ -116,7 +120,9 @@ function ntEmpresaCambio() { mselOpciones("n_sucs", sucursalesDe(ntVal("n_emp"))
 function ntComunes() {
   return { detalle: ntVal("n_detalle"), fecha: ntVal("n_fecha"), dir: "", comuna: "",
     motivo_precio: ntVal("n_motivo"), fuente: selOtraValor("n_fuente"), fuente_ref: ntVal("n_fuente_ref"),
-    pago: ntVal("n_pago"),
+    pago: ntVal("n_pago"), vigente_hasta: ntVal("n_vigente"), valor_agregado: ntVal("n_valor_agregado"),
+    por_confirmar: (document.getElementById("n_por_confirmar") || {}).checked ? "si" : "",
+    carga_min: ntVal("n_carga_min"), carga_max: ntVal("n_carga_max"), carga_unidad: ntVal("n_carga_unidad"),
     ref_comuna: ntVal("n_ref_comuna") ? comunaCanonica(ntVal("n_ref_comuna")) : "", ref_region: ntVal("n_ref_region") };
 }
 
@@ -125,7 +131,7 @@ function ntCapturar() {
   if (!NT) return;
   const leer = tr => ({ tipo: tr.querySelector(".nt-tipo").value, serv: selOtraValor(tr.querySelector(".nt-serv")),
     cont: selOtraValor(tr.querySelector(".nt-cont")), vol: tr.querySelector(".nt-vol").value.trim(),
-    monto: tr.querySelector(".nt-monto").value.trim(), moneda: tr.querySelector(".nt-moneda").value, unidad: selOtraValor(tr.querySelector(".nt-unidad")) });
+    monto: tr.querySelector(".nt-monto").value.trim(), moneda: tr.querySelector(".nt-moneda").value, unidad: selOtraValor(tr.querySelector(".nt-unidad")), ...tratCeldaValor(tr) });
   document.querySelectorAll("#n_ref tr[data-k]").forEach(tr => { NT.ref[tr.dataset.k] = leer(tr); });
   document.querySelectorAll("#n_cli tr[data-k]").forEach(tr => { NT.cli[tr.dataset.k] = leer(tr); });
   document.querySelectorAll("#nuevaTarifaModal tr[data-k] .nt-dest").forEach(c => { NT.dest[c.closest("tr").dataset.k.replace(/#\d+$/, "")] = destCeldaValor(c); });
@@ -141,7 +147,7 @@ function ntCapturar() {
 /** Cantidad de líneas de cobro: referencial por residuo; en cada sucursal sigue a la referencial salvo que se cambie ahí. */
 const ntNRef = k => NT.nRef[k] || 1;
 const ntNCli = (base, k) => NT.nCli[base] != null ? NT.nCli[base] : ntNRef(k);
-const ntCab = '<tr><th>Residuo</th><th>Destino</th><th>Tipo</th><th>Servicio *</th><th>Contenedor</th><th>m³</th><th>Monto</th><th>Moneda</th><th>Unidad</th><th></th></tr>';
+const ntCab = '<tr><th>Residuo</th><th>Destino</th><th>Tipo</th><th>Servicio *</th><th>Tratamiento</th><th>Contenedor</th><th>m³</th><th>Monto</th><th>Moneda</th><th>Unidad</th><th></th></tr>';
 /** Servicio de un cobro (obligatorio). */
 function ntServSel(cls, val, attrs) { return selOtraHtml('class="' + cls + '"' + (attrs || ''), tiposServicio(), val, "— elegir —"); }
 /** Destino de un residuo: el de la sucursal si se cambió ahí; si no, el de la referencial. */
@@ -166,6 +172,7 @@ function ntFila(r, i, v, cual, base, ayuda) {
     '<td>' + (i ? '<span class="muted small">el de arriba</span>' : destinoCeldaHtml(cual === "ref" ? NT.dest[base] || "" : ntDestDe(base, base.split("|")[1]), "ntDestEditado(\'" + cual + "\',\'" + esc(base) + "\')")) + '</td>' +
     '<td><select class="nt-tipo" onchange="' + ed + '"><option value="cobra"' + (v.tipo !== "paga" ? ' selected' : '') + '>Cobra</option><option value="paga"' + (v.tipo === "paga" ? ' selected' : '') + '>Paga</option></select></td>' +
     '<td>' + ntServSel("nt-serv", v.serv || "", ' onchange="' + ed + '"') + '</td>' +
+    '<td>' + tratCeldaHtml(r, v, ed) + '</td>' +
     '<td>' + contSel(v.cont || "", ' onchange="' + ed + '"', "Sin contenedor") + '</td>' +
     '<td><input class="nt-vol" inputmode="decimal" placeholder="m³" value="' + esc(v.vol || "") + '" oninput="' + ed + '"></td>' +
     '<td><input class="nt-monto" inputmode="decimal" placeholder="Monto" value="' + esc(v.monto || "") + '" oninput="' + ed + '"></td>' +
@@ -184,6 +191,7 @@ function ntEditado(cual, key) {
       tr.querySelector(".nt-tipo").value = v.tipo || "cobra"; selOtraPoner(tr.querySelector(".nt-serv"), v.serv || "");
       selOtraPoner(tr.querySelector(".nt-cont"), v.cont || ""); tr.querySelector(".nt-vol").value = v.vol || "";
       tr.querySelector(".nt-monto").value = v.monto || ""; tr.querySelector(".nt-moneda").value = v.moneda || "CLP"; selOtraPoner(tr.querySelector(".nt-unidad"), v.unidad || "");
+      tratCeldaPoner(tr, v);
       NT.cli[tr.dataset.k] = Object.assign({}, v);
     });
   }
@@ -379,9 +387,12 @@ function ntArmar() {
   const vol = txt => { if (!txt) return ""; const n = numDe(txt); if (n == null) throw new Error("Revisa el volumen: " + txt); return n; };
   const base = {
     proveedor_id: sup ? sup.id : "", proveedor_nombre: sup ? sup.name : nombre,
-    cantidad_min: "", cantidad_max: "", pdf_url: "",
-    motivo_precio: com.motivo_precio, fuente: com.fuente, fuente_ref: com.fuente_ref
+    cantidad_min: vol(com.carga_min), cantidad_max: vol(com.carga_max), carga_unidad: com.carga_unidad, pdf_url: "",
+    motivo_precio: com.motivo_precio, fuente: com.fuente, fuente_ref: com.fuente_ref,
+    vigente_hasta: com.vigente_hasta, por_confirmar: com.por_confirmar, valor_agregado: com.valor_agregado
   };
+  // tratamiento y destrucción de marca solo en los cobros con disposición o compra (Q11)
+  const trat = v => conTratamiento(v.serv) ? { tratamiento: v.trat || "", incluye_destruccion_marca: v.dm || "" } : { tratamiento: "", incluye_destruccion_marca: "" };
   const pagoPara = cli => com.pago !== "" ? vol(com.pago) : pagoDiasPorDefecto(cli);
   const lista = [], nuevasSucursales = [];
   // 3 · referenciales: una por residuo con monto (× contenedor), con las condiciones comunes
@@ -391,7 +402,7 @@ function ntArmar() {
     const dest = NT.dest[k] || "";
     lista.push(Object.assign({}, base, { residuo: r, contenedor: v.cont || "", precio: monto, moneda: v.moneda || "CLP", unidad: v.unidad || "",
       tipo_transaccion: v.tipo === "paga" ? "paga" : "cobra", tipo_servicio: v.serv || "", volumen_m3: vol(v.vol || ""),
-      destino: dest, comuna_destino: comunaDeDestino(dest),
+      destino: dest, comuna_destino: comunaDeDestino(dest), ...trat(v),
       fecha: com.fecha, detalle: com.detalle, _pdf: ntAdjPara("REF", ntK(r)),
       estado_servicio: "Valor general", cliente: "", estado_cliente: "", sucursal: "", direccion: "",
       comuna: com.ref_comuna, region: com.ref_comuna ? regionDeComuna(com.ref_comuna) : com.ref_region, condicion_pago_dias: pagoPara("") }));
@@ -419,7 +430,7 @@ function ntArmar() {
         const dest = ntDestDe(b, k);
         lista.push(Object.assign({}, base, lugar, { residuo: r, contenedor: v.cont || "", precio: monto, moneda: v.moneda || "CLP", unidad: v.unidad || "",
           tipo_transaccion: v.tipo === "paga" ? "paga" : "cobra", tipo_servicio: v.serv || "", volumen_m3: vol(v.vol || ""),
-          destino: dest, comuna_destino: comunaDeDestino(dest),
+          destino: dest, comuna_destino: comunaDeDestino(dest), ...trat(v),
           detalle: c.detalle || "",
           fecha: porSuc ? (c.fecha || fechaCli) : fechaCli, _pdf: ntAdjPara(sk, ntK(r)),
           sucursal: su, estado_servicio: estado, cliente: emp, estado_cliente: estCli, condicion_pago_dias: pagoPara(emp) }));

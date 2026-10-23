@@ -264,7 +264,8 @@ async function loadTarifas() {
     const [rows, cats] = await Promise.all([
       gvizFetch(MIRROR_SHEET_ID, TARIFAS_GID, true, true),
       gvizFetch(MIRROR_SHEET_ID, CATALOGOS_GID, true, true).catch(() => null),
-      gvizFetch(MIRROR_SHEET_ID, SUCURSALES_GID, true, true).then(filasAObjetos).then(l => { SUCURSALES = l.filter(x => x.empresa && x.sucursal); }).catch(() => null)
+      gvizFetch(MIRROR_SHEET_ID, SUCURSALES_GID, true, true).then(filasAObjetos).then(l => { SUCURSALES = l.filter(x => x.empresa && x.sucursal); }).catch(() => null),
+      cargarTratamientos()
     ]);
     TARIFAS = filasAObjetos(rows).filter(t => tget(t, "id")).map(prepararTarifa);
     aplicarPendientes();
@@ -334,7 +335,8 @@ function clpDe(t) {
 
 function grupoKey(t) {
   // "cobra" y "paga" nunca se comparan entre sí
-  return [t.tipo, norm(t.residuo), norm(t.unidad), contKey(t), t.tipo_servicio, t.region || ""].join("|");
+  // el tratamiento también separa: el mismo residuo reciclado o eliminado son precios distintos (Q7c)
+  return [t.tipo, norm(t.residuo), norm(t.unidad), contKey(t), t.tipo_servicio, t.region || "", norm(tget(t, "tratamiento"))].join("|");
 }
 
 /** Por grupo comparable y por (proveedor, empresa, sucursal), la más reciente es la vigente. */
@@ -543,7 +545,9 @@ function filaTarifaHtml(t, opts) {
     (opts.sinProveedor ? '' : '<td><b>' + esc(t.proveedor_nombre || "-") + '</b>' + (opts.best ? ' <span class="t-best">★ ' + (t.tipo === "paga" ? "paga más" : "menor") + '</span>' : '') + '</td>') +
     '<td>' + empresaHtml(t) + '</td>' +
     (opts.conServicio ? '<td>' + esc(t.residuo || "-") + (t.tipo === "paga" ? ' <span class="pill p-paga">paga</span>' : '') + '<div class="muted small">' + esc([t.tipo_servicio, contenedorTxt(t)].filter(Boolean).join(" · ")) + '</div>' +
-      (t.detalle ? '<div class="t-detalle-txt">' + esc(t.detalle).replace(/\n/g, '<br>') + '</div>' : '') + '</td>' : '') +
+      (tratamientoTxt(t) ? '<div class="small t-trat">' + esc(tratamientoTxt(t)) + '</div>' : '') + marcasV3Html(t) +
+      (t.detalle ? '<div class="t-detalle-txt">' + esc(t.detalle).replace(/\n/g, '<br>') + '</div>' : '') +
+      (tget(t, "valor_agregado") ? '<div class="t-detalle-txt"><b>Valor agregado:</b> ' + esc(t.valor_agregado) + '</div>' : '') + '</td>' : '') +
     '<td>' + esc(lugar || "-") + (cant ? '<div class="muted small">cant. ' + esc(cant) + '</div>' : '') + '</td>' +
     '<td class="num">' + precioHtml(t) + '</td>' +
     '<td><span class="small">' + esc(t.fecha || "-") + '</span><div class="muted small">' + esc(t.fuente || "") + (t.pdf_url ? ' · <a href="' + esc(t.pdf_url) + '" target="_blank" rel="noopener">PDF</a>' : '') + '</div></td>' +
@@ -1222,9 +1226,10 @@ function abrirFormTarifa(id, prefill, grupo) {
       campo("f_region", "Región", '<input id="f_region" readonly tabindex="-1">')) +
       campo("f_precio", "Monto neto (sin IVA)", inp("f_precio", v.precio, 'inputmode="decimal" placeholder="Ej: 192000 o 3,5"')) +
       campo("f_moneda", "Moneda", sel("f_moneda", CATS.moneda, v.moneda)) +
-      campo("f_cant", "Cantidad mín. – máx.", '<div class="tf-dos">' + inp("f_cantidad_min", v.cantidad_min, 'inputmode="decimal" placeholder="mín"') + inp("f_cantidad_max", v.cantidad_max, 'inputmode="decimal" placeholder="máx"') + '</div>') +
+      campo("f_cant", "Carga mínima – máxima <span class=\"muted\">· opcional</span>", '<div class="tf-dos">' + inp("f_cantidad_min", v.cantidad_min, 'inputmode="decimal" placeholder="mín"') + inp("f_cantidad_max", v.cantidad_max, 'inputmode="decimal" placeholder="máx"') + cargaUnidadSel("f_carga_unidad", tget(v, "carga_unidad")) + '</div>') +
       campo("f_fecha", "Fecha de la tarifa", '<input id="f_fecha" type="date" value="' + esc(v.fecha) + '">') +
       camposV2Html(v, v.proveedor_nombre) +
+      camposV3Html(v, residuos) +
       campo("f_detalle", "Detalle del cobro (por qué cobra eso, condiciones)", '<textarea id="f_detalle" rows="3">' + esc(v.detalle || "") + '</textarea>', "span2") +
       campo("f_pdf", "PDF respaldo", (v.pdf_url ? '<div class="small"><a href="' + esc(v.pdf_url) + '" target="_blank" rel="noopener">Ver PDF actual</a> · subir otro reemplaza el enlace</div>' : '') + '<input id="f_pdf" type="file" accept="application/pdf">' + '<input id="f_pdf_url" type="hidden" value="' + esc(v.pdf_url || "") + '">', "span2") +
     '</div>' +
@@ -1297,7 +1302,7 @@ function leerFormulario() {
     cantidad_max: g("f_cantidad_max") === "" ? "" : numDe(g("f_cantidad_max")),
     fecha: g("f_fecha"), detalle: g("f_detalle"), pdf_url: g("f_pdf_url")
   };
-  Object.assign(base, leerCamposV2(g));
+  Object.assign(base, leerCamposV2(g), leerCamposV3());
   ["precio", "cantidad_min", "cantidad_max"].forEach(k => { if (base[k] === null) throw new Error("Revisa el número en " + k.replace("_", " ") + "."); });
   if (!base.proveedor_nombre) throw new Error("Falta el proveedor.");
   const general = norm(base.estado_servicio) === "VALORGENERAL";
@@ -1341,6 +1346,7 @@ async function asegurarCatalogos(datos) {
       datos[c] = r.valor; (CATS[c] = CATS[c] || []).push(r.valor);
     } catch (e) { console.warn("No se pudo agregar al catálogo", c, v, e.message); } // el catálogo no debe impedir guardar la tarifa
   }
+  await asegurarTratamientos([datos]); // tratamiento nuevo para ese residuo (y su familia si es nuevo del todo)
 }
 
 function leerArchivoBase64(file) {
@@ -1645,7 +1651,8 @@ function sucursalRegistrada(empresa, nombre) {
 function interpretarLineas(base, lineas) {
   const comun = {};
   ["proveedor_nombre", "proveedor", "cliente", "empresa", "sucursal", "tipo_transaccion", "estado_servicio", "estado_cliente", "direccion", "comuna", "fecha", "fuente", "moneda", "detalle", "incluye_transporte", "incluye_disposicion",
-    "tipo_servicio", "motivo_precio", "fuente_ref", "destino", "comuna_destino", "volumen_m3", "condicion_pago_dias"].forEach(k => { if (base[k] != null && base[k] !== "" && !(Array.isArray(base[k]) && !base[k].length)) comun[k === "proveedor" ? "proveedor_nombre" : k] = base[k]; });
+    "tipo_servicio", "motivo_precio", "fuente_ref", "destino", "comuna_destino", "volumen_m3", "condicion_pago_dias",
+    "tratamiento", "vigente_hasta", "por_confirmar", "valor_agregado", "carga_unidad"].forEach(k => { if (base[k] != null && base[k] !== "" && !(Array.isArray(base[k]) && !base[k].length)) comun[k === "proveedor" ? "proveedor_nombre" : k] = base[k]; });
   // Una línea puede traer listas en "residuo", "contenedor", "comuna" y "sucursal": una tarifa por combinación.
   const expandidas = [];
   lineas.forEach(l => {
@@ -1686,6 +1693,13 @@ function interpretarLineas(base, lineas) {
     d.volumen_m3 = numDe(d.volumen_m3) ?? volumenDeContenedor(d.contenedor) ?? "";
     d.contenedor = contenedorBase(d.contenedor); // la medida queda en volumen_m3
     d.condicion_pago_dias = numDe(d.condicion_pago_dias) ?? pagoDiasPorDefecto(d.cliente);
+    // V3: tratamiento y destrucción de marca solo en cobros con disposición o compra; sí/no; vigencia como fecha
+    d.incluye_destruccion_marca = sn(d.incluye_destruccion_marca) === "si" ? "si" : "";
+    d.por_confirmar = sn(d.por_confirmar) === "si" ? "si" : "";
+    if (!conTratamiento(d.tipo_servicio)) { d.tratamiento = ""; d.incluye_destruccion_marca = ""; }
+    else if (d.tratamiento) d._tratamiento_nuevo = !tratamientoPermitido(d.residuo, d.tratamiento);
+    if (d.vigente_hasta && typeof fechaIso === "function") d.vigente_hasta = fechaIso(d.vigente_hasta);
+    if (d.carga_unidad) d.carga_unidad = String(d.carga_unidad).toLowerCase();
     return d;
   });
 }

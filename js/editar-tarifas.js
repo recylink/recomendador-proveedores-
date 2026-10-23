@@ -11,7 +11,7 @@
 let ET = null; // { nombre, s, blks: [{ bk, ref, cliente, sucursal, t0, ids, init, cond, pdf }], filas: {id: {...}}, nuevas: [{ bk, residuo, ... }] }
 
 const ET_VAR = "__var";
-const ET_CONDS = ["fecha", "detalle", "estado_servicio", "motivo_precio", "fuente", "fuente_ref", "condicion_pago_dias"];
+const ET_CONDS = ["fecha", "detalle", "estado_servicio", "motivo_precio", "fuente", "fuente_ref", "condicion_pago_dias", "vigente_hasta", "por_confirmar", "valor_agregado"];
 
 function botonEditarTarifas(nombre) {
   return '<button class="ct-editar" onclick="event.stopPropagation();abrirEditarTarifas(' + esc(JSON.stringify(nombre)) + ')">Editar tarifas</button>';
@@ -44,7 +44,7 @@ function abrirEditarTarifas(nombre, destacar) {
     });
     b.cond = Object.assign({}, b.init);
     b.pdf = null;
-    b.ts.forEach(t => { filas[t.id] = { t, tipo: t.tipo, serv: t.tipo_servicio || "", cont: contenedorBase(t.contenedor), vol: volumenEf(t) ?? "", dest: tget(t, "destino"), monto: tget(t, "precio"), moneda: t.moneda || "CLP", unidad: tget(t, "unidad"), baja: false }; });
+    b.ts.forEach(t => { filas[t.id] = { t, tipo: t.tipo, serv: t.tipo_servicio || "", cont: contenedorBase(t.contenedor), vol: volumenEf(t) ?? "", dest: tget(t, "destino"), monto: tget(t, "precio"), moneda: t.moneda || "CLP", unidad: tget(t, "unidad"), trat: tget(t, "tratamiento"), dm: siNo(t.incluye_destruccion_marca) === "si" ? "si" : "", baja: false }; });
     delete b.ts;
   });
   ET = { nombre: s ? s.name : nombre, s, blks, filas, nuevas: [], anteriores: todas.length - ts.length, destacar: new Set(destacar || []) };
@@ -88,7 +88,7 @@ function etCapturar() {
   if (!ET) return;
   const leer = tr => ({ tipo: tr.querySelector(".nt-tipo").value, serv: selOtraValor(tr.querySelector(".nt-serv")), monto: tr.querySelector(".nt-monto").value.trim(),
     cont: selOtraValor(tr.querySelector(".nt-cont")), vol: tr.querySelector(".nt-vol").value.trim(), dest: destCeldaValor(tr.querySelector(".nt-dest")),
-    moneda: tr.querySelector(".nt-moneda").value, unidad: selOtraValor(tr.querySelector(".nt-unidad")) });
+    moneda: tr.querySelector(".nt-moneda").value, unidad: selOtraValor(tr.querySelector(".nt-unidad")), ...tratCeldaValor(tr) });
   document.querySelectorAll("#editarTarifasModal tr[data-id]").forEach(tr => { const f = ET.filas[tr.dataset.id]; if (f && !f.baja) Object.assign(f, leer(tr)); });
   document.querySelectorAll("#editarTarifasModal tr[data-nueva]").forEach(tr => { const n = ET.nuevas[+tr.dataset.nueva]; if (n) Object.assign(n, leer(tr)); });
   document.querySelectorAll("#editarTarifasModal .nt-suc[data-bk]").forEach(div => {
@@ -98,13 +98,14 @@ function etCapturar() {
 }
 
 /* ---------- dibujo ---------- */
-const etCab = '<tr><th>Residuo</th><th>Destino</th><th>Tipo</th><th>Servicio</th><th>Contenedor</th><th>m³</th><th>Monto</th><th>Moneda</th><th>Unidad</th><th></th></tr>';
+const etCab = '<tr><th>Residuo</th><th>Destino</th><th>Tipo</th><th>Servicio</th><th>Tratamiento</th><th>Contenedor</th><th>m³</th><th>Monto</th><th>Moneda</th><th>Unidad</th><th></th></tr>';
 function etFila(attr, residuo, v, sub, acciones, clase) {
   const dis = v.baja ? ' disabled' : '';
   return '<tr ' + attr + (clase ? ' class="' + clase + '"' : '') + '><td><b>' + esc(residuo) + '</b>' + (sub ? '<div class="muted small">' + sub + '</div>' : '') + '</td>' +
     '<td>' + destinoCeldaHtml(v.dest || "", "etResumen()") + '</td>' +
     '<td><select class="nt-tipo"' + dis + ' onchange="etResumen()"><option value="cobra"' + (v.tipo !== "paga" ? ' selected' : '') + '>Cobra</option><option value="paga"' + (v.tipo === "paga" ? ' selected' : '') + '>Paga</option></select></td>' +
     '<td>' + ntServSel("nt-serv", v.serv || "", dis + ' onchange="etResumen()"') + '</td>' +
+    '<td>' + tratCeldaHtml(residuo, v, "etResumen()") + '</td>' +
     '<td>' + contSel(v.cont || "", dis + ' onchange="etResumen()"', "Sin contenedor") + '</td>' +
     '<td><input class="nt-vol" inputmode="decimal" placeholder="m³"' + dis + ' value="' + esc(v.vol ?? "") + '" oninput="etResumen()"></td>' +
     '<td><input class="nt-monto" inputmode="decimal" placeholder="Monto"' + dis + ' value="' + esc(v.monto || "") + '" oninput="etResumen()"></td>' +
@@ -132,7 +133,10 @@ function etCondHtml(b) {
     selc("fuente", "Tipo de fuente", [["", "— elegir —"]].concat(fuentesLista().map(x => [x, x]))) +
     txt("fuente_ref", "Referencia de la fuente", 'placeholder="Ej: Cotización N° 123"') +
     txt("condicion_pago_dias", "Pago (días)", 'inputmode="numeric"') +
+    txt("vigente_hasta", "Vigente hasta", 'type="date"') +
+    selc("por_confirmar", "Dato por confirmar", [["", "No"], ["si", "Sí"]]) +
     txt("detalle", "Detalle del cobro", "", "nt-ancho") +
+    txt("valor_agregado", "Valor agregado", 'placeholder="CO₂ evitado, material recuperado, trazabilidad…"', "nt-ancho") +
   '</div>';
 }
 function etPdfHtml(b) {
@@ -154,7 +158,7 @@ function etBloqueHtml(b) {
       ? '<button type="button" class="lnk small" title="Deshacer" onclick="etBaja(\'' + esc(id) + '\',false)">↺ deshacer</button>'
       : '<button type="button" class="ico-btn danger" title="Eliminar esta tarifa" onclick="etBaja(\'' + esc(id) + '\',true)">−</button>';
     lineas.push({ r: t.residuo || "(sin residuo)", html: etFila('data-id="' + esc(id) + '"', t.residuo || "(sin residuo)", f, (f.baja ? '<span class="warn">se eliminará</span>' + (sub ? " · " : "") : "") + sub, acc, f.baja ? "et-baja" : ET.destacar.has(id) ? "et-alerta" : "") +
-      (ET.destacar.has(id) && !f.baja && t.alertas && t.alertas.length ? '<tr class="et-alerta-txt"><td colspan="10">' + t.alertas.map(a => '⚠ ' + esc(a)).join('<br>') + '</td></tr>' : '') });
+      (ET.destacar.has(id) && !f.baja && t.alertas && t.alertas.length ? '<tr class="et-alerta-txt"><td colspan="11">' + t.alertas.map(a => '⚠ ' + esc(a)).join('<br>') + '</td></tr>' : '') });
   });
   ET.nuevas.forEach((n, i) => {
     if (n.bk !== b.bk) return;
@@ -206,7 +210,7 @@ function etAgregar(bk, residuo) {
   // parte con la unidad y el tipo de una línea del mismo residuo en el bloque, si hay
   const b = ET.blks.find(x => x.bk === bk);
   const hermana = b.ids.map(id => ET.filas[id]).find(f => norm(f.t.residuo) === norm(canon));
-  ET.nuevas.push({ bk, residuo: canon, tipo: hermana ? hermana.tipo : "cobra", serv: hermana ? hermana.serv : "", cont: hermana ? hermana.cont : "", vol: hermana ? hermana.vol : "", dest: hermana ? hermana.dest : "", monto: "", moneda: hermana ? hermana.moneda : "CLP", unidad: hermana ? hermana.unidad : "" });
+  ET.nuevas.push({ bk, residuo: canon, tipo: hermana ? hermana.tipo : "cobra", serv: hermana ? hermana.serv : "", cont: hermana ? hermana.cont : "", vol: hermana ? hermana.vol : "", dest: hermana ? hermana.dest : "", monto: "", moneda: hermana ? hermana.moneda : "CLP", unidad: hermana ? hermana.unidad : "", trat: hermana ? hermana.trat : "", dm: hermana ? hermana.dm : "" });
   etRender();
 }
 function etQuitarNueva(i) { etCapturar(); ET.nuevas.splice(i, 1); etRender(); }
@@ -259,6 +263,10 @@ function etArmar() {
       if (f.serv && f.serv !== t.tipo_servicio) c.tipo_servicio = f.serv;
       if (norm(f.cont) !== norm(contenedorBase(t.contenedor))) c.contenedor = f.cont;
       if ((f.dest || "") !== tget(t, "destino")) { c.destino = f.dest || ""; c.comuna_destino = comunaDeDestino(f.dest); }
+      // tratamiento y destrucción de marca: solo en cobros con disposición o compra (Q11)
+      const servF = f.serv || t.tipo_servicio, trF = conTratamiento(servF) ? (f.trat || "") : "", dmF = conTratamiento(servF) ? (f.dm || "") : "";
+      if (trF !== tget(t, "tratamiento")) c.tratamiento = trF;
+      if (dmF !== (siNo(t.incluye_destruccion_marca) === "si" ? "si" : "")) c.incluye_destruccion_marca = dmF;
       const volN = f.vol === "" ? "" : numDe(f.vol);
       if (volN === null) throw new Error("Revisa el volumen de " + (t.residuo || "residuo") + " en " + donde + ".");
       if (volN !== (volumenEf(t) ?? "")) c.volumen_m3 = volN;
@@ -279,6 +287,8 @@ function etArmar() {
         contenedor: n.cont || "", volumen_m3: n.vol === "" || n.vol == null ? "" : numDe(n.vol) ?? "",
         motivo_precio: val("motivo_precio") || "", fuente: val("fuente") || "", fuente_ref: val("fuente_ref") || "",
         destino: n.dest || "", comuna_destino: comunaDeDestino(n.dest), condicion_pago_dias: numDe(val("condicion_pago_dias")) ?? pagoDiasPorDefecto(b.ref ? "" : b.cliente),
+        tratamiento: conTratamiento(n.serv) ? n.trat || "" : "", incluye_destruccion_marca: conTratamiento(n.serv) ? n.dm || "" : "",
+        vigente_hasta: val("vigente_hasta") || "", por_confirmar: val("por_confirmar") || "", valor_agregado: val("valor_agregado") || "",
         fecha: val("fecha") || new Date().toISOString().slice(0, 10), detalle: val("detalle") || "",
         estado_servicio: b.ref ? "Valor general" : (val("estado_servicio") || "Activo"),
         cliente: b.ref ? "" : b.cliente, sucursal: b.ref ? "" : b.sucursal, estado_cliente: b.ref ? "" : tget(t0, "estado_cliente"),
