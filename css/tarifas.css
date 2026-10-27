@@ -261,6 +261,12 @@ tr.abierta .t-flecha { transform:rotate(90deg); }
 .his-sep { width:1px; height:16px; background:#E4E7EC; }
 .his-sw { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; flex:none; }
 .his-ley .his-sw { margin-right:0; }
+/* residuo con su color de la plataforma (pestaña Densidades): fondo del color y letra blanca; en colores claros, letra oscura */
+.res-tag, .chip.res-tag { display:inline-flex; align-items:center; padding:2px 9px; border-radius:8px; font-weight:700; line-height:1.35;
+  background:var(--rc); color:#fff; }
+.ref-linea { margin-bottom:7px; line-height:1.6; }
+.ref-linea .res-tag { margin-right:6px; }
+.res-tag.res-claro, .chip.res-tag.res-claro { color:#1f2937; box-shadow:inset 0 0 0 1px rgba(0,0,0,.12); }
 .his-ico { flex:none; }
 .his-graf { position:relative; width:100%; }
 .his-graf svg { display:block; }

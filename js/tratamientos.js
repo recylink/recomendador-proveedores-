@@ -14,18 +14,23 @@ const TIPOS_CON_TRATAMIENTO = ["Disposición", "Transporte + disposición", "Com
 const FAMILIAS = ["Valorización", "Eliminación", "Otra"];
 let TRATS = [];   // [{ residuo, tratamiento, familia }]
 let EQUIVS = {};  // norm(residuo del Recomendador) → residuo de la plataforma (pestaña "Equivalencias", Q10)
+let DENS = {};    // norm(residuo de la plataforma) → { kgm3, color } (pestaña "Densidades", Q16; viene en ton/m³)
 const conTratamiento = serv => TIPOS_CON_TRATAMIENTO.includes(serv);
 const SIN_TRAT = "Sin especificar";
 
 async function cargarTratamientos() {
   try {
-    const [t, e] = await Promise.all([
+    const [t, e, d] = await Promise.all([
       gvizFetch(MIRROR_SHEET_ID, "sheet=Tratamientos", true, true),
-      gvizFetch(MIRROR_SHEET_ID, "sheet=Equivalencias", true, true).catch(() => null)
+      gvizFetch(MIRROR_SHEET_ID, "sheet=Equivalencias", true, true).catch(() => null),
+      gvizFetch(MIRROR_SHEET_ID, "sheet=Densidades", true, true).catch(() => null)
     ]);
     TRATS = filasAObjetos(t).filter(x => x.residuo && x.tratamiento);
     EQUIVS = {};
     (e ? filasAObjetos(e) : []).forEach(x => { if (x.residuo && x.residuo_plataforma) EQUIVS[norm(x.residuo)] = x.residuo_plataforma; });
+    DENS = {};
+    // gviz entrega "0.066" con punto decimal: numDe lo leería como miles (66)
+    (d ? filasAObjetos(d) : []).forEach(x => { const v = parseFloat(String(x.densidad_ton_m3).replace(",", ".")); if (x.residuo && (v > 0 || x.color)) DENS[norm(x.residuo)] = { kgm3: v > 0 ? v * 1000 : null, color: x.color || "" }; });
   } catch (err) { console.warn("No se pudo leer la pestaña Tratamientos:", err.message); }
 }
 
@@ -36,6 +41,21 @@ function residuoPlataforma(residuo) {
   if (EQUIVS[k]) return EQUIVS[k];
   const x = TRATS.find(t => norm(t.residuo) === k) || TRATS.find(t => singular(norm(t.residuo)) === singular(k));
   return x ? x.residuo : "";
+}
+/** Fila de la pestaña Densidades de un residuo del Recomendador: equivalencia, mismo nombre, plataforma o singular/plural. */
+function densidadRegistro(residuo) {
+  const k = norm(residuo); if (!k) return null;
+  return DENS[norm(EQUIVS[k] || "")] || DENS[k] || DENS[norm(residuoPlataforma(residuo))] ||
+    Object.keys(DENS).filter(x => singular(x) === singular(k)).map(x => DENS[x])[0] || null;
+}
+/** Nombre del residuo sobre su color de la plataforma (sin color: solo el nombre).
+ *  cls: clase extra (p. ej. "chip"). Letra blanca; en los colores muy claros (amarillos, grises claros), letra oscura. */
+function resTag(residuo, cls) {
+  const txt = esc(residuo || "-");
+  const c = (densidadRegistro(residuo) || {}).color || "";
+  if (!/^#[0-9a-f]{6}$/i.test(c)) return cls ? '<span class="' + cls + '">' + txt + '</span>' : txt;
+  const n = parseInt(c.slice(1), 16), lum = (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255;
+  return '<span class="res-tag' + (lum > 0.72 ? ' res-claro' : '') + (cls ? ' ' + cls : '') + '" style="--rc:' + c + '">' + txt + '</span>';
 }
 /** Tratamientos del residuo (Q8). Si el residuo no tiene lista, se ofrecen todos los conocidos. */
 function tratamientosDe(residuo) {

@@ -101,7 +101,7 @@ function etCapturar() {
 const etCab = '<tr><th>Residuo</th><th>Destino</th><th>Tipo</th><th>Servicio</th><th>Tratamiento</th><th>Contenedor</th><th>m³</th><th>Monto</th><th>Moneda</th><th>Unidad</th><th></th></tr>';
 function etFila(attr, residuo, v, sub, acciones, clase) {
   const dis = v.baja ? ' disabled' : '';
-  return '<tr ' + attr + (clase ? ' class="' + clase + '"' : '') + '><td><b>' + esc(residuo) + '</b>' + (sub ? '<div class="muted small">' + sub + '</div>' : '') + '</td>' +
+  return '<tr ' + attr + (clase ? ' class="' + clase + '"' : '') + '><td><b>' + resTag(residuo) + '</b>' + (sub ? '<div class="muted small">' + sub + '</div>' : '') + '</td>' +
     '<td>' + destinoCeldaHtml(v.dest || "", "etResumen()") + '</td>' +
     '<td><select class="nt-tipo"' + dis + ' onchange="etResumen()"><option value="cobra"' + (v.tipo !== "paga" ? ' selected' : '') + '>Cobra</option><option value="paga"' + (v.tipo === "paga" ? ' selected' : '') + '>Paga</option></select></td>' +
     '<td>' + ntServSel("nt-serv", v.serv || "", dis + ' onchange="etResumen()"') + '</td>' +

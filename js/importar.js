@@ -295,7 +295,7 @@ function vistaImportacionHtml() {
     return '<tr><td><span class="pill imp-' + accion.toLowerCase() + '">' + accion + '</span></td>' +
       '<td>' + esc(d.proveedor_nombre) + (d.proveedor_id ? "" : ' <span class="t-alerta">no está en ClickUp</span>') + '</td>' +
       '<td>' + empresaHtml(d) + (d._sucursal_doc ? '<div class="muted small">en el archivo: ' + esc(d._sucursal_doc) + '</div>' : "") + '</td>' +
-      '<td>' + esc(d.residuo) + '<div class="muted small">' + esc([d.tipo_servicio, d.contenedor, d.tratamiento].filter(Boolean).join(" · ")) + '</div>' + (d._tratamiento_nuevo ? '<div class="small warn">tratamiento nuevo para este residuo: se agregaría</div>' : '') + '</td>' +
+      '<td>' + resTag(d.residuo) + '<div class="muted small">' + esc([d.tipo_servicio, d.contenedor, d.tratamiento].filter(Boolean).join(" · ")) + '</div>' + (d._tratamiento_nuevo ? '<div class="small warn">tratamiento nuevo para este residuo: se agregaría</div>' : '') + '</td>' +
       '<td>' + esc(d.comuna || "-") + '</td><td class="num">' + precio + (otros.length ? '<div class="muted small">cambia: ' + esc(otros.join(", ")) + '</div>' : "") + '</td></tr>';
   };
   const filas = plan.editar.map(e => fila("Actualiza", e.d, e)).concat(plan.crear.map(d => fila(d._anterior ? "Anterior" : "Nueva", d)));

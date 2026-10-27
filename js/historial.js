@@ -169,7 +169,7 @@ function renderHistorialPrecios() {
     (HIS_PREVIOS_ERR ? '<p class="warn small">No se pudo leer el Historial (' + esc(HIS_PREVIOS_ERR) + '): faltan los valores anteriores de las tarifas editadas.</p>' : '') +
     (!pts.length ? '<div class="empty">Sin precios para ' + esc(HIS.residuo) + ' · ' + esc(HIS.servicio) + u + (HIS.region ? ' en ' + esc(HIS.region) : '') + '.</div>' :
     '<div class="cmp-box">' +
-      '<div class="cmp-cab"><b>' + esc(paga ? "Lo que paga el proveedor" : "Lo que cobra el proveedor") + ' · ' + esc(HIS.residuo) + ' · ' + esc(HIS.servicio) + ' en ' + (HIS.moneda === "UF" ? "UF" : "pesos") + esc(u) + (HIS.region ? ' · ' + esc(HIS.region) : '') + '</b>' +
+      '<div class="cmp-cab"><b>' + esc(paga ? "Lo que paga el proveedor" : "Lo que cobra el proveedor") + ' · ' + resTag(HIS.residuo) + ' · ' + esc(HIS.servicio) + ' en ' + (HIS.moneda === "UF" ? "UF" : "pesos") + esc(u) + (HIS.region ? ' · ' + esc(HIS.region) : '') + '</b>' +
         '<span class="muted">' + pts.length + ' precio' + (pts.length > 1 ? 's' : '') + ' · ' + new Set(pts.map(p => p.prov)).size + ' proveedor' + (new Set(pts.map(p => p.prov)).size > 1 ? 'es' : '') + '</span></div>' +
       leyendaHistorial(pts, colorDe) +
       '<div id="hisGraf" class="his-graf"></div>' +

@@ -10,13 +10,18 @@
    Depende de js/tarifas.js (TARIFAS, clpDe, mediana, esGeneral, fmtCLP…) y js/esquema.js.
    ============================================================ */
 
-// kg por m³ por residuo, para llevar la disposición por kg a costo por m³.
-// Solo valores con respaldo; el resto queda sin costo por m³ hasta que Lica los valide.
-const DENSIDADES = {
-  DOMICILIARIOS: { kgm3: 100, nota: "planilla Sodimac: batea 30 m³ ≈ 3.000 kg" }
-};
+// kg por m³ por residuo, para llevar la disposición por kg a costo por m³: la densidad estándar de la plataforma
+// (pestaña "Densidades", js/tratamientos.js), salvo que la tarifa informe el peso del contenedor lleno.
 const RETIROS_MES = 4; // supuesto para prorratear el arriendo mensual
-const densidadDe = residuo => DENSIDADES[norm(residuo)] || null;
+function densidadDe(residuo) {
+  const d = densidadRegistro(residuo);
+  return d && d.kgm3 ? { kgm3: d.kgm3, nota: "densidad estándar de la plataforma" } : null;
+}
+/** Densidad del contenedor lleno: el peso informado en alguna de sus tarifas (÷ volumen) o la estándar del residuo. */
+function densidadContenedor(ts, vol, dens) {
+  const kg = ts.map(t => numDe(t.peso_lleno_kg)).find(v => v > 0);
+  return kg && vol ? { kgm3: kg / vol, nota: "peso lleno informado en la tarifa: " + fmtNum(kg, 0) + " kg" } : dens;
+}
 
 // Confiabilidad de cada tipo de fuente (catálogo de 16, pestaña "Fuentes")
 const CONF_FUENTE = {
@@ -81,10 +86,10 @@ function costosM3(ts) {
     if (!g.length) return;
     const pk = pagas.filter(t => unidadEs(t, "kg")), pBase = pk.length ? pk : pagas;
     const compra = pBase.length ? { valor: mediana(pBase.map(clpDe)), unidad: pBase[0].unidad, tarifas: pBase } : null;
-    const dens = densidadDe(g[0].residuo);
+    const densRes = densidadDe(g[0].residuo);
     // por kg o ton → por m³ (necesita densidad); por m³ → directo
-    const dispM3 = t => unidadEs(t, "m3") ? clpDe(t) : !dens ? null : unidadEs(t, "kg") ? clpDe(t) * dens.kgm3 : unidadEs(t, "ton") ? clpDe(t) * dens.kgm3 / 1000 : null;
-    const disp = g.filter(t => esServ(t, "Disposición") && dispM3(t) != null);
+    const dispM3 = (t, dn) => unidadEs(t, "m3") ? clpDe(t) : !dn ? null : unidadEs(t, "kg") ? clpDe(t) * dn.kgm3 : unidadEs(t, "ton") ? clpDe(t) * dn.kgm3 / 1000 : null;
+    const disp = g.filter(t => esServ(t, "Disposición") && clpDe(t) != null && ["m3", "kg", "ton"].some(u => unidadEs(t, u)));
     const conts = {};
     g.forEach(t => { const v = volumenEf(t); if (contenedorBase(t.contenedor) && v) conts[contKey(t)] = { cont: contenedorBase(t.contenedor), vol: v }; });
     const lista = Object.keys(conts).length ? Object.keys(conts) : [""];
@@ -95,14 +100,15 @@ function costosM3(ts) {
       const tr = g.find(t => esServ(t, "Transporte") && porViaje(t) && contKey(t) === ck);
       const tdM3 = g.find(t => esServ(t, "Transporte + disposición") && unidadEs(t, "m3") && mismo(t));
       const ar = g.find(t => esServ(t, "Arriendo") && unidadEs(t, "mes") && mismo(t));
-      const d = disp[0];
+      const dens = densidadContenedor(g.filter(mismo), c.vol, densRes);
+      const d = disp.find(t => dispM3(t, dens) != null);
       const lineas = [], usadas = [];
       let op = null;
       if (td && c.vol) {
         op = clpDe(td) / c.vol; usadas.push(td);
         lineas.push({ comp: "Retiro con disposición", tarifa: precioCorto(td), porCont: clpDe(td), porM3: op });
       } else if (tr && d && c.vol) {
-        const t1 = clpDe(tr), d1 = dispM3(d);
+        const t1 = clpDe(tr), d1 = dispM3(d, dens);
         op = t1 / c.vol + d1; usadas.push(tr, d);
         lineas.push({ comp: "Retiro (transporte)", tarifa: precioCorto(tr), porCont: t1, porM3: t1 / c.vol });
         lineas.push({ comp: "Disposición", tarifa: precioCorto(d) + (unidadEs(d, "m3") ? "" : " × " + fmtNum(dens.kgm3 * c.vol, 0) + " " + (unidadEs(d, "ton") ? "kg (" + fmtNum(dens.kgm3 * c.vol / 1000, 2) + " ton)" : "kg") + " (contenedor lleno)"), porCont: d1 * c.vol, porM3: d1 });
@@ -133,9 +139,13 @@ function costosM3(ts) {
         conArr = op + a / c.vol; usadas.push(ar);
         lineas.push({ comp: "Arriendo del contenedor", tarifa: precioCorto(ar) + " ÷ " + RETIROS_MES + " retiros", porCont: a, porM3: a / c.vol, aparte: true });
       }
+      // lo que paga el proveedor por el contenedor lleno (densidad): solo informativo, no se descuenta del costo
+      const kgLleno = dens && c.vol ? dens.kgm3 * c.vol : null;
+      const compraCont = compra && kgLleno && (unidadEs(compra.tarifas[0], "kg") || unidadEs(compra.tarifas[0], "ton"))
+        ? { valor: compra.valor * (unidadEs(compra.tarifas[0], "ton") ? kgLleno / 1000 : kgLleno), kg: kgLleno } : null;
       const t0 = usadas[0];
       out.push({ provKey: t0.provKey, proveedor: t0.proveedor_nombre, cliente: t0.cliente, sucursal: t0.sucursal || t0.comuna, residuo: t0.residuo,
-        region: t0.region || regionDeComuna(t0.comuna) || "", cont: c.cont, vol: c.vol, op, conArr, lineas, tarifas: usadas, dens, pago: tget(t0, "condicion_pago_dias"), compra, tratamiento });
+        region: t0.region || regionDeComuna(t0.comuna) || "", cont: c.cont, vol: c.vol, op, conArr, lineas, tarifas: usadas, dens, pago: tget(t0, "condicion_pago_dias"), compra, compraCont, tratamiento });
     });
   });
   return out;
@@ -225,9 +235,12 @@ function desgloseHtml(it) {
     it.lineas.filter(l => !l.aparte).map(l => '<tr><td>' + esc(l.comp) + '</td><td>' + esc(l.tarifa) + '</td><td class="num">' + (l.porCont != null ? fmtCLP(l.porCont) : "—") + '</td><td class="num">' + fmtCLP(l.porM3) + '</td></tr>').join('') +
     '<tr class="desg-tot"><td>Costo operativo</td><td></td><td class="num">' + fmtCLP(it.op * it.vol) + '</td><td class="num">' + fmtCLP(it.op) + '</td></tr>' +
     it.lineas.filter(l => l.aparte).map(l => '<tr class="muted"><td>' + esc(l.comp) + '</td><td>' + esc(l.tarifa) + '</td><td class="num">' + fmtCLP(l.porCont) + '</td><td class="num">' + fmtCLP(l.porM3) + '</td></tr>').join('') +
-    (it.compra ? '<tr class="desg-paga"><td>El proveedor paga por el material</td><td>' + esc("+" + fmtCLP(it.compra.valor) + " / " + it.compra.unidad) + '</td><td class="num" colspan="2">no se descuenta del costo</td></tr>' : '') +
+    (it.compra ? '<tr class="desg-paga"><td>El proveedor paga por el material</td><td>' + esc("+" + fmtCLP(it.compra.valor) + " / " + it.compra.unidad) + '</td>' +
+      (it.compraCont ? '<td class="num">+' + fmtCLP(it.compraCont.valor) + '</td><td class="num">+' + fmtCLP(it.compraCont.valor / it.vol) + '</td></tr>' +
+        '<tr class="desg-paga"><td>Balance por retiro (no se descuenta del costo)</td><td>' + esc(fmtNum(it.compraCont.kg, 0) + " kg con el contenedor lleno") + '</td><td class="num">' + (it.compraCont.valor >= it.op * it.vol ? "+" : "−") + fmtCLP(Math.abs(it.compraCont.valor - it.op * it.vol)) + '</td><td class="num">' + (it.compraCont.valor >= it.op * it.vol ? "+" : "−") + fmtCLP(Math.abs(it.compraCont.valor / it.vol - it.op)) + '</td></tr>'
+        : '<td class="num" colspan="2">no se descuenta del costo</td></tr>') : '') +
     (it.conArr != null ? '<tr class="desg-tot"><td>Total con arriendo</td><td></td><td class="num">' + fmtCLP(it.conArr * it.vol) + '</td><td class="num">' + fmtCLP(it.conArr) + '</td></tr>' : '') +
-    '</table>' + (it.dens && it.lineas.some(l => l.comp === "Disposición") ? '<div class="muted small">Contenedor lleno con ' + fmtNum(it.dens.kgm3, 0) + ' kg/m³ (' + esc(it.dens.nota) + ').' + (it.pago ? ' Condición de pago: ' + esc(it.pago) + ' días.' : '') + '</div>' : '') + '</div>';
+    '</table>' + (it.dens && (it.compraCont || it.lineas.some(l => l.comp === "Disposición")) ? '<div class="muted small">Contenedor lleno con ' + fmtNum(it.dens.kgm3, 0) + ' kg/m³ (' + esc(it.dens.nota) + ').' + (it.pago ? ' Condición de pago: ' + esc(it.pago) + ' días.' : '') + '</div>' : '') + '</div>';
 }
 function verDesglose(id, btn) {
   const el = document.getElementById(id); if (!el) return;
@@ -249,7 +262,7 @@ function referencialRegionHtml(ts, opts) {
   if (!filas.length && !sinTar.length) return '<div class="ref-box">' + cab + (opts.proveedor && !opts.soloConPrecio ? '<div class="sec-acc">' + botonNuevaReferencial(opts.proveedor) + '</div>' : '<div class="muted small">Sin tarifas.</div>') + '</div>';
   const uf = UF.valor ? " · UF del día " + fmtCLP(UF.valor) : "";
   const fila = f => {
-    const resTxt = '<b>' + esc(f.residuo) + '</b>' + (f.paga ? ' <span class="pill p-paga">paga</span>' : '') + '<div class="muted small">' + esc(f.tipo === "m3" ? "Costo operativo: transporte + disposición" : f.servicio || "-") + '</div>' +
+    const resTxt = '<b>' + resTag(f.residuo) + '</b>' + (f.paga ? ' <span class="pill p-paga">paga</span>' : '') + '<div class="muted small">' + esc(f.tipo === "m3" ? "Costo operativo: transporte + disposición" : f.servicio || "-") + '</div>' +
       (f.tratamiento ? '<div class="small t-trat">' + esc(f.tratamiento + (familiaDe(f.tratamiento) ? " · " + familiaDe(f.tratamiento) : "")) + '</div>' : '');
     let precio;
     if (f.tipo === "m3") {
@@ -460,7 +473,7 @@ function renderCompararUnidad(box) {
       (conTr ? filtrosTratamientoHtml(t2Todos.map(t => tget(t, "tratamiento"))) : '') +
     '</div>' +
     (!provs.length ? '<div class="empty">Sin tarifas para ' + esc(CMP.residuo) + ' · ' + esc(CMP.servicio) + ' por ' + esc(CMP.unidad) + ' en ' + esc(CMP.region || "esta región") + '.</div>' :
-    '<div class="cmp-box"><div class="cmp-cab"><b>' + esc(paga ? "Lo que paga el proveedor" : "Lo que cobra el proveedor") + ' · ' + esc(CMP.residuo) + ' · ' + esc(CMP.servicio) + u + '</b>' +
+    '<div class="cmp-box"><div class="cmp-cab"><b>' + esc(paga ? "Lo que paga el proveedor" : "Lo que cobra el proveedor") + ' · ' + resTag(CMP.residuo) + ' · ' + esc(CMP.servicio) + u + '</b>' +
       '<span><b>Precio de mercado en ' + esc(CMP.region) + ': ' + fmtCLP(merc) + u + '</b> <span class="muted">(mediana de ' + todosProv.length + ' proveedor' + (todosProv.length > 1 ? 'es' : '') + ')</span></span></div>' +
       (paga ? '<div class="muted small">El proveedor compra el material: arriba el que paga más.</div>' : '') +
       (unidades.length > 1 ? '<div class="muted small">Solo se comparan precios en la misma unidad. Este servicio también tiene tarifas por ' + esc(unidades.filter(u => u !== CMP.unidad).map(u => u + " (" + provPorUni[u].size + ")").join(", ")) + ': cámbialo en Unidad.</div>' : '') +

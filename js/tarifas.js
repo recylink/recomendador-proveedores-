@@ -544,7 +544,7 @@ function filaTarifaHtml(t, opts) {
   return '<tr class="' + (t.activo ? "" : "t-baja ") + (t.vigente || !t.activo ? "" : "t-anterior ") + (opts.best ? "best" : "") + (opts.sub ? " t-sub" : "") + '"' + (opts.sub ? ' data-grp="' + opts.sub + '" style="display:none"' : '') + '>' +
     (opts.sinProveedor ? '' : '<td><b>' + esc(t.proveedor_nombre || "-") + '</b>' + (opts.best ? ' <span class="t-best">★ ' + (t.tipo === "paga" ? "paga más" : "menor") + '</span>' : '') + '</td>') +
     '<td>' + empresaHtml(t) + '</td>' +
-    (opts.conServicio ? '<td>' + esc(t.residuo || "-") + (t.tipo === "paga" ? ' <span class="pill p-paga">paga</span>' : '') + '<div class="muted small">' + esc([t.tipo_servicio, contenedorTxt(t)].filter(Boolean).join(" · ")) + '</div>' +
+    (opts.conServicio ? '<td>' + resTag(t.residuo) + (t.tipo === "paga" ? ' <span class="pill p-paga">paga</span>' : '') + '<div class="muted small">' + esc([t.tipo_servicio, contenedorTxt(t)].filter(Boolean).join(" · ")) + '</div>' +
       (tratamientoTxt(t) ? '<div class="small t-trat">' + esc(tratamientoTxt(t)) + '</div>' : '') + marcasV3Html(t) +
       (t.detalle ? '<div class="t-detalle-txt">' + esc(t.detalle).replace(/\n/g, '<br>') + '</div>' : '') +
       (tget(t, "valor_agregado") ? '<div class="t-detalle-txt"><b>Valor agregado:</b> ' + esc(t.valor_agregado) + '</div>' : '') + '</td>' : '') +
@@ -952,7 +952,7 @@ function residuosFilaHtml(t0, ts) {
   const lista = cu.length ? unicosOrdenados(cu) : unicosOrdenados(ts.map(t => t.residuo)).filter(r => !/^sin especificar$/i.test(r));
   if (!lista.length) return '<span class="muted">-</span>';
   const max = 6;
-  return '<div class="res-fila">' + lista.slice(0, max).map(r => '<span class="chip">' + esc(r) + '</span>').join('') +
+  return '<div class="res-fila">' + lista.slice(0, max).map(r => resTag(r, "chip")).join('') +
     (lista.length > max ? '<span class="muted small" title="' + esc(lista.slice(max).join(", ")) + '">+' + (lista.length - max) + '</span>' : '') +
     '</div>' + (cu.length ? '' : '<div class="muted small">' + nota + '</div>');
 }
@@ -964,7 +964,7 @@ function filaProveedorHtml(ts) {
   // Referencial corta: primero los costos por m³ (por región), después lo que va por unidad
   const conPrecio = referencialRegiones(ts).filter(f => f.valor != null).sort((a, b) => (a.tipo === "m3" ? 0 : 1) - (b.tipo === "m3" ? 0 : 1));
   const refCorta = conPrecio.length
-    ? conPrecio.slice(0, 3).map(f => '<div class="small">' + esc(f.residuo) + (f.region ? ' <span class="muted">' + esc(f.region) + '</span>' : '') + ' <b class="' + (f.paga ? "t-paga" : "") + '">' + fmtCLP(f.valor) + '</b> <span class="muted">/ ' + esc(f.tipo === "m3" ? "m³" : f.unidad || "") + '</span></div>').join('') + (conPrecio.length > 3 ? '<div class="muted small">+' + (conPrecio.length - 3) + ' más</div>' : '')
+    ? conPrecio.slice(0, 3).map(f => '<div class="small ref-linea">' + resTag(f.residuo) + (f.region ? ' <span class="muted">' + esc(f.region) + '</span>' : '') + ' <b class="' + (f.paga ? "t-paga" : "") + '">' + fmtCLP(f.valor) + '</b> <span class="muted">/ ' + esc(f.tipo === "m3" ? "m³" : f.unidad || "") + '</span></div>').join('') + (conPrecio.length > 3 ? '<div class="muted small">+' + (conPrecio.length - 3) + ' más</div>' : '')
     : '<span class="muted">sin precio</span>';
   const empresas = unicosOrdenados(ts.filter(t => !esGeneral(t)).map(t => t.cliente));
   const actualizado = ts.map(t => String(t.actualizado_el || t.fecha || "").slice(0, 10)).sort().pop();
@@ -1097,7 +1097,7 @@ function referencialHtml(ts, opts) {
   filas.forEach(f => { if (!f.proveedor) f.proveedor = opts.proveedor; });
   const n = ts.filter(t => t.vigente && t.alertas && t.alertas.length).length;
   return '<div class="ref-box"><span class="t-etq">' + esc(opts.titulo || "Tarifa referencial") + (n ? ' ' + alertaBadge(ts.filter(t => t.vigente), n) : '') + '</span>' +
-    '<table class="ttar ref-tab">' + filas.map(f => '<tr' + (f.sinTarifas ? ' class="ref-sin"' : '') + '><td>' + esc(f.residuo) + (f.paga ? ' <span class="pill p-paga">paga</span>' : '') + '</td><td class="num">' + (f.sinTarifas ? '<span class="muted">—</span>' : refPrecioHtml(f)) + '</td><td class="muted small">' + esc(f.nota) + '</td>' +
+    '<table class="ttar ref-tab">' + filas.map(f => '<tr' + (f.sinTarifas ? ' class="ref-sin"' : '') + '><td>' + resTag(f.residuo) + (f.paga ? ' <span class="pill p-paga">paga</span>' : '') + '</td><td class="num">' + (f.sinTarifas ? '<span class="muted">—</span>' : refPrecioHtml(f)) + '</td><td class="muted small">' + esc(f.nota) + '</td>' +
       '<td><span class="ref-acc">' + botonReferencial(f) + '</span></td></tr>').join('') + '</table>' +
     (opts.proveedor && !opts.soloConPrecio ? '<div class="sec-acc">' + botonNuevaReferencial(opts.proveedor) + '</div>' : '') + '</div>';
 }
