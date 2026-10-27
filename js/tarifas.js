@@ -39,10 +39,25 @@ const siNo = v => { const s = String(v || "").toLowerCase(); return s === "si" |
 function claveNombre(s) {
   return norm(String(s || "").replace(/\b(s\.?\s?p\.?\s?a\.?|ltda\.?|limitada|s\.?\s?a\.?|e\.?i\.?r\.?l\.?|y\s+c[ií]a\.?)\s*$/i, ""));
 }
-/** Busca el proveedor en ClickUp: nombre exacto sin razón social, o un parecido parcial fuerte. */
-function buscarProveedorClickUp(nombre) {
+/** RUT sin puntos, guion ni espacios ("76.123.456-k" → "76123456K"); "" si no parece RUT. */
+const rutClave = rut => { const r = String(rut || "").toUpperCase().replace(/[^0-9K]/g, ""); return r.length >= 7 ? r : ""; };
+/** Fichas de ClickUp con ese RUT (con o sin dígito verificador). Puede haber varias: una empresa con varias plantas. */
+function fichasPorRut(rut) {
+  const k = rutClave(rut); if (!k) return [];
+  return SUPPLIERS.filter(s => { const c = !s.sheetOnly && rutClave(s.rut); return c && (c === k || c.slice(0, -1) === k || c === k.slice(0, -1)); });
+}
+/** La ficha de ese RUT; si el RUT es de varias fichas, la que calza por nombre (si ninguna calza, null). */
+function proveedorPorRut(rut, nombre) {
+  const f = fichasPorRut(rut);
+  return f.length === 1 ? f[0] : porNombre(f, nombre);
+}
+/** Busca el proveedor en ClickUp: por RUT si viene (manda aunque el nombre no calce), si no por nombre. */
+function buscarProveedorClickUp(nombre, rut) {
+  return proveedorPorRut(rut, nombre) || porNombre(SUPPLIERS.filter(s => !s.sheetOnly), nombre);
+}
+/** Nombre exacto sin razón social, o un parecido parcial fuerte. */
+function porNombre(candidatos, nombre) {
   const k = claveNombre(nombre); if (!k) return null;
-  const candidatos = SUPPLIERS.filter(s => !s.sheetOnly);
   return candidatos.find(s => claveNombre(s.name) === k)
     || candidatos.find(s => {
       // Parecido parcial solo si es fuerte: el corto es al menos la mitad del largo,
@@ -1664,7 +1679,7 @@ function sucursalRegistrada(empresa, nombre) {
 /** Líneas de tarifa (de Claude o de una planilla) → tarifas listas para guardar, con los datos comunes de la cabecera. */
 function interpretarLineas(base, lineas) {
   const comun = {};
-  ["proveedor_nombre", "proveedor", "cliente", "empresa", "sucursal", "tipo_transaccion", "estado_servicio", "estado_cliente", "direccion", "comuna", "fecha", "fuente", "moneda", "detalle", "incluye_transporte", "incluye_disposicion",
+  ["proveedor_nombre", "proveedor", "proveedor_rut", "cliente", "empresa", "sucursal", "tipo_transaccion", "estado_servicio", "estado_cliente", "direccion", "comuna", "region", "fecha", "fuente", "moneda", "detalle", "incluye_transporte", "incluye_disposicion",
     "tipo_servicio", "motivo_precio", "fuente_ref", "destino", "comuna_destino", "volumen_m3", "condicion_pago_dias",
     "tratamiento", "vigente_hasta", "por_confirmar", "valor_agregado", "carga_unidad"].forEach(k => { if (base[k] != null && base[k] !== "" && !(Array.isArray(base[k]) && !base[k].length)) comun[k === "proveedor" ? "proveedor_nombre" : k] = base[k]; });
   // Una línea puede traer listas en "residuo", "contenedor", "comuna" y "sucursal": una tarifa por combinación.
@@ -1683,8 +1698,9 @@ function interpretarLineas(base, lineas) {
     if (d.cliente) d.cliente = empresaCanonica(d.cliente);
     d.tipo_transaccion = String(d.tipo_transaccion || "cobra").toLowerCase() === "paga" ? "paga" : "cobra";
     if (base.detalle && l.detalle && l.detalle !== base.detalle) d.detalle = l.detalle + "\n" + base.detalle;
-    const sup = buscarProveedorClickUp(d.proveedor_nombre);
-    if (sup) { d._nombre_doc = d.proveedor_nombre; d.proveedor_id = sup.id; d.proveedor_nombre = sup.name; }
+    const rut = d.proveedor_rut; delete d.proveedor_rut; // solo sirve para identificar la ficha de ClickUp
+    const sup = buscarProveedorClickUp(d.proveedor_nombre, rut);
+    if (sup) { d._nombre_doc = d.proveedor_nombre; d.proveedor_id = sup.id; d.proveedor_nombre = sup.name; if (fichasPorRut(rut).includes(sup)) d._por_rut = true; }
     if (d.sucursal && d.cliente) {
       const reg = sucursalRegistrada(d.cliente, d.sucursal);
       if (reg && reg !== d.sucursal) { d._sucursal_doc = d.sucursal; d.sucursal = reg; }
@@ -1732,7 +1748,7 @@ function interpretarPegado() {
     prev.innerHTML = (plan.editar.length || plan.iguales.length ? '<p class="small">' + [plan.crear.length + " nuevas", plan.editar.length && plan.editar.length + " ya existen y se actualizan", plan.iguales.length && plan.iguales.length + " ya estaban iguales (se omiten)"].filter(Boolean).join(" · ") + '.</p>' : '') +
       (sinProv ?'<p class="warn small">' + sinProv + ' línea(s) con un proveedor que no encontré en ClickUp: se guardarán solo con el nombre.</p>' : '') +
       '<div class="tscroll"><table class="ttar"><tr><th>Proveedor</th><th>Empresa / sucursal</th><th>Servicio</th><th>Lugar</th><th>Precio</th><th></th></tr>' +
-      conAlerta.map(t => '<tr><td>' + esc(t.proveedor_nombre) + (t.proveedor_id ? (t._nombre_doc && claveNombre(t._nombre_doc) !== claveNombre(t.proveedor_nombre) ? '<div class="muted small">en la cotización: ' + esc(t._nombre_doc) + '</div>' : '') : ' <span class="t-alerta">no está en ClickUp</span>') + '</td><td>' + empresaHtml(t) + '</td><td>' + esc(t.residuo || "-") + '<div class="muted small">' + esc([t.tipo_servicio, contenedorTxt(t)].filter(Boolean).join(" · ")) + '</div></td><td>' + esc(t.comuna || t.direccion || "-") + '</td><td class="num">' + precioHtml(t) + '</td><td>' + alertaHtml(t) + '</td></tr>').join('') +
+      conAlerta.map(t => '<tr><td>' + esc(t.proveedor_nombre) + (t.proveedor_id ? (t._nombre_doc && claveNombre(t._nombre_doc) !== claveNombre(t.proveedor_nombre) ? '<div class="muted small">en la cotización: ' + esc(t._nombre_doc) + (t._por_rut ? ' · identificado por RUT' : '') + '</div>' : '') : ' <span class="t-alerta">no está en ClickUp</span>') + '</td><td>' + empresaHtml(t) + '</td><td>' + esc(t.residuo || "-") + '<div class="muted small">' + esc([t.tipo_servicio, contenedorTxt(t)].filter(Boolean).join(" · ")) + '</div></td><td>' + esc(t.comuna || t.direccion || "-") + '</td><td class="num">' + precioHtml(t) + '</td><td>' + alertaHtml(t) + '</td></tr>').join('') +
       '</table></div>' +
       campo("pegarPdf", "PDF de la cotización (se adjunta a todas)", '<input id="pegarPdf" type="file" accept="application/pdf">', "span2") +
       '<div class="tf-acc"><span id="pegarStatus2" class="muted small"></span>' +
