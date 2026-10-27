@@ -106,6 +106,7 @@ const ESTADO_TXT = { vigente: "vigente", reemplazada: "reemplazada por una más 
 
 /* ---------------- vista ---------------- */
 function abrirVistaTar(v) {
+  document.getElementById("tarFiltros").style.display = v === "lista" ? "" : "none"; // Comparar e Historial tienen sus propios filtros
   document.getElementById("tarList").style.display = v === "lista" ? "" : "none";
   document.getElementById("tarCount").style.display = v === "lista" ? "" : "none";
   document.getElementById("tarComparar").style.display = v === "cmp" ? "" : "none";

@@ -231,7 +231,7 @@ tr.abierta .t-flecha { transform:rotate(90deg); }
 .desg-tab td { padding:4px; border-top:1px solid #F2F4F7; }
 .desg-tab .num { text-align:right; }
 .desg-tab tr.desg-tot td { font-weight:700; border-top:1px solid #D0D5DD; }
-.tar-vista { display:inline-flex; border:1px solid #D0D5DD; border-radius:8px; overflow:hidden; margin:10px 0 4px; }
+.tar-vista { display:inline-flex; border:1px solid #D0D5DD; border-radius:8px; overflow:hidden; margin:4px 0 14px; }
 .tar-vista button, .cmp-toggle button { font:inherit; font-size:13px; border:0; background:#fff; color:#344054; padding:8px 14px; cursor:pointer; }
 .tar-vista button.on, .cmp-toggle button.on { background:#0069A6; color:#fff; font-weight:600; }
 .cmp-filtros { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; margin:10px 0; }

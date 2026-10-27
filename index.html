@@ -114,10 +114,10 @@ a { color:var(--blue); }
   .print-header img { height:34px; width:auto; }
 }
 </style>
-<link rel="stylesheet" href="css/tarifas.css?v=3.78">
+<link rel="stylesheet" href="css/tarifas.css?v=3.79">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="css/recylink.css?v=3.78">
+<link rel="stylesheet" href="css/recylink.css?v=3.79">
 </head>
 <body>
 <div class="wrap">
@@ -167,7 +167,20 @@ a { color:var(--blue); }
   <div id="list"></div>
   </div>
   <div id="viewTar" style="display:none">
-    <div class="controls tar-controls">
+    <div class="tar-actions">
+      <button class="cbtn" onclick="abrirNuevaTarifa()">+ Nueva tarifa</button>
+      <button class="cbtn sec" onclick="abrirImportar()">Importar planilla</button>
+      <button class="cbtn sec" onclick="abrirPegarClaude()">Pegar desde Claude</button>
+      <button class="cbtn sec" onclick="abrirSucursales()">Sucursales</button>
+      <button class="cbtn sec" onclick="abrirAplicarEmpresa()" title="Días de pago para todas las sucursales de una empresa">Condición de pago de una empresa</button>
+      <span id="ufInfo"></span>
+    </div>
+    <div class="tar-vista" role="group" aria-label="Vista de tarifas">
+      <button type="button" class="on" data-v="lista" onclick="abrirVistaTar('lista')">Proveedores</button>
+      <button type="button" data-v="cmp" onclick="abrirVistaTar('cmp')">Comparar por región</button>
+      <button type="button" data-v="his" onclick="abrirVistaTar('his')">Historial de precios</button>
+    </div>
+    <div class="controls tar-controls" id="tarFiltros"><!-- filtros de la vista Proveedores; Comparar e Historial tienen los suyos -->
       <div class="span2"><label>1 · Residuos</label><div id="tfResiduoBox"></div></div>
       <div><label>2 · Proveedor (nombre o RUT)</label><input type="text" id="tfProveedor" list="provDL" placeholder="Nombre o RUT..." autocomplete="off"></div>
       <div><label>3 · Región</label><select id="tfRegion"></select></div>
@@ -182,19 +195,6 @@ a { color:var(--blue); }
         <label class="chk"><input type="checkbox" id="tfAlertas"> Solo con alertas &#9888;</label>
         <label class="chk"><input type="checkbox" id="tfAnteriores"> Mostrar valores anteriores</label>
       </div>
-    </div>
-    <div class="tar-actions">
-      <button class="cbtn" onclick="abrirNuevaTarifa()">+ Nueva tarifa</button>
-      <button class="cbtn sec" onclick="abrirImportar()">Importar planilla</button>
-      <button class="cbtn sec" onclick="abrirPegarClaude()">Pegar desde Claude</button>
-      <button class="cbtn sec" onclick="abrirSucursales()">Sucursales</button>
-      <button class="cbtn sec" onclick="abrirAplicarEmpresa()" title="Días de pago para todas las sucursales de una empresa">Condición de pago de una empresa</button>
-      <span id="ufInfo"></span>
-    </div>
-    <div class="tar-vista" role="group" aria-label="Vista de tarifas">
-      <button type="button" class="on" data-v="lista" onclick="abrirVistaTar('lista')">Proveedores</button>
-      <button type="button" data-v="cmp" onclick="abrirVistaTar('cmp')">Comparar por región</button>
-      <button type="button" data-v="his" onclick="abrirVistaTar('his')">Historial de precios</button>
     </div>
     <div class="count" id="tarCount"></div>
     <div id="tarList"></div>
@@ -234,16 +234,16 @@ a { color:var(--blue); }
 </div>
 
 <!-- ?v=: subir el número al publicar cambios en estos archivos, para que el navegador no use la copia vieja -->
-<script src="js/comunas.js?v=3.78"></script>
-<script src="js/esquema.js?v=3.78"></script>
-<script src="js/tratamientos.js?v=3.78"></script>
-<script src="js/tarifas.js?v=3.78"></script>
-<script src="js/referenciales.js?v=3.78"></script>
-<script src="js/historial.js?v=3.78"></script>
-<script src="js/sinader.js?v=3.78"></script>
-<script src="js/nueva-tarifa.js?v=3.78"></script>
-<script src="js/editar-tarifas.js?v=3.78"></script>
-<script src="js/importar.js?v=3.78"></script>
+<script src="js/comunas.js?v=3.79"></script>
+<script src="js/esquema.js?v=3.79"></script>
+<script src="js/tratamientos.js?v=3.79"></script>
+<script src="js/tarifas.js?v=3.79"></script>
+<script src="js/referenciales.js?v=3.79"></script>
+<script src="js/historial.js?v=3.79"></script>
+<script src="js/sinader.js?v=3.79"></script>
+<script src="js/nueva-tarifa.js?v=3.79"></script>
+<script src="js/editar-tarifas.js?v=3.79"></script>
+<script src="js/importar.js?v=3.79"></script>
 <script>
 /* ============================================================
    FUENTES DE DATOS (lectura via gviz)
