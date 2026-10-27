@@ -1079,7 +1079,7 @@ function referenciales(ts) {
   });
   return orden.map(k => {
     const g = grupos[k], gen = g.filter(esGeneral), base = gen.length ? gen : g;
-    const vals = base.map(clpDe).filter(v => v != null && v > 1);
+    const vals = base.map(clpDe).filter(v => v != null && v >= 0); // $1 o $0 son precios reales (los rellenos se eliminaron 2026-10-27)
     const prom = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
     const ref = prom(vals);
     // Sin valor UF del día: se promedia en UF en vez de dejarlo "sin precio"

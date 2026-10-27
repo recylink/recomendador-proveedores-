@@ -80,7 +80,7 @@ function puntosHistorial() {
     region: t.region || "", empresa: t.cliente, sucursal: t.sucursal, fuente: t.fuente || "", motivo: tget(t, "motivo_precio"), ufGuardada: numDe(t.valor_uf),
     trat: tget(t, "tratamiento") || SIN_TRAT });
   const out = [];
-  TARIFAS.filter(t => (t.activo || HIS.bajas) && t.precio_num != null && t.precio_num > 1 && tget(t, "fecha") && t.unidad).forEach(t => {
+  TARIFAS.filter(t => (t.activo || HIS.bajas) && t.precio_num != null && t.precio_num >= 0 && tget(t, "fecha") && t.unidad).forEach(t => {
     out.push(Object.assign(base(t), { fecha: tget(t, "fecha").slice(0, 10), precio: t.precio_num, moneda: t.moneda, unidad: t.unidad,
       estado: !t.activo ? "baja" : t.vigente ? "vigente" : "reemplazada" }));
   });
@@ -88,7 +88,7 @@ function puntosHistorial() {
   TARIFAS.forEach(t => { porId[t.id] = t; });
   (HIS_PREVIOS || []).forEach(e => {
     const t = porId[e.id]; if (!t || (!t.activo && !HIS.bajas)) return;
-    const precio = numDe(e.campos.precio); if (precio == null || precio <= 1) return;
+    const precio = numDe(e.campos.precio); if (precio == null || precio < 0) return;
     const unidad = "unidad" in e.campos ? e.campos.unidad : t.unidad; if (!unidad) return;
     out.push(Object.assign(base(t), { fecha: String(e.campos.fecha || tget(t, "fecha")).slice(0, 10), precio, unidad,
       moneda: String(("moneda" in e.campos ? e.campos.moneda : t.moneda) || "CLP").toUpperCase(),

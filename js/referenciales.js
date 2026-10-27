@@ -168,7 +168,7 @@ function mercado() {
   });
   // por unidad: residuo × servicio × unidad × cobra/paga × región
   const pu = {};
-  TARIFAS.filter(t => t.activo && t.vigente && t.precio_num != null && clpDe(t) != null && clpDe(t) > 1).forEach(t => {
+  TARIFAS.filter(t => t.activo && t.vigente && t.precio_num != null && clpDe(t) != null && clpDe(t) >= 0).forEach(t => {
     const k = claveUnidad(t); ((pu[k] = pu[k] || {})[t.provKey] = pu[k][t.provKey] || []).push(clpDe(t));
   });
   Object.keys(pu).forEach(k => { const provs = Object.values(pu[k]); unid[k] = { v: mediana(provs.map(l => mediana(l))), n: provs.length }; });
@@ -201,7 +201,7 @@ function referencialRegiones(ts) {
   ts.filter(t => t.activo && t.vigente && !usadas.has(t.id)).forEach(t => { const k = claveUnidad(t) + "|t:" + norm(tget(t, "tratamiento")); (pu[k] = pu[k] || []).push(t); });
   Object.keys(pu).forEach(k => {
     const l = pu[k], gen = l.filter(esGeneral), base = gen.length ? gen : l, t0 = base[0];
-    const vals = base.map(clpDe).filter(v => v != null && v > 1);
+    const vals = base.map(clpDe).filter(v => v != null && v >= 0); // $1 o $0 son precios reales (los rellenos se eliminaron 2026-10-27)
     const genT = gen.slice().sort((a, b) => String(b.fecha + b.actualizado_el).localeCompare(String(a.fecha + a.actualizado_el)))[0];
     const fijada = genT && clpDe(genT) != null ? clpDe(genT) : null;
     const valor = fijada != null ? fijada : mediana(vals);
@@ -223,8 +223,9 @@ function vsMercadoHtml(valor, m, paga) {
   if (valor == null || !m || m.v == null && m.op == null) return '<span class="muted small">sin comparables</span>';
   const ref = m.op != null ? m.op : m.v;
   if (m.n < 2) return '<div class="muted small">1 proveedor (solo este)</div>';
-  const dif = (valor - ref) / ref;
-  const bajo = dif < 0, txt = Math.abs(dif) < 0.005 ? "igual al mercado" : Math.round(Math.abs(dif) * 100) + "% " + (bajo ? "bajo" : "sobre") + " el mercado";
+  // mercado en $0 (p. ej. retiro a costo cero): no hay porcentaje, solo igual / sobre / bajo
+  const dif = ref === 0 ? (valor === 0 ? 0 : valor > 0 ? 1 : -1) : (valor - ref) / ref;
+  const bajo = dif < 0, txt = Math.abs(dif) < 0.005 ? "igual al mercado" : (ref === 0 ? "" : Math.round(Math.abs(dif) * 100) + "% ") + (bajo ? "bajo" : "sobre") + " el mercado";
   const bueno = paga ? !bajo : bajo; // si el proveedor paga, más alto es mejor
   return '<div><b>' + fmtCLP(ref) + '</b></div><div class="small ' + (Math.abs(dif) < 0.005 ? "muted" : bueno ? "ok-msg" : "warn") + '">' + txt + '</div><div class="muted small">' + m.n + ' proveedores</div>';
 }
