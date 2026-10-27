@@ -1016,6 +1016,12 @@ function aplicarTarifasAProveedores() {
   SUPPLIERS = SUPPLIERS.filter(s => !s.sheetOnly);
   const conocidos = {};
   SUPPLIERS.forEach(s => { conocidos[s.id] = s; conocidos["n:" + norm(s.name)] = s; });
+  // tarifas sin proveedor_id (carga inicial) cuyo nombre calza con una ficha de ClickUp: se agrupan con esa ficha
+  let reagrupadas = 0;
+  TARIFAS.forEach(t => {
+    const s = !tget(t, "proveedor_id") && conocidos[t.provKey];
+    if (s && s.id !== t.provKey) { t.provKey = s.id; reagrupadas++; }
+  });
   const extra = {};
   TARIFAS.filter(t => t.activo).forEach(t => {
     if ((t.proveedor_id && conocidos[t.proveedor_id]) || conocidos["n:" + norm(t.proveedor_nombre)]) return;
@@ -1039,6 +1045,7 @@ function aplicarTarifasAProveedores() {
     tarifasDeProveedor(s).forEach(t => { if (t.residuo && !set[norm(t.residuo)] && norm(t.residuo) !== "SINESPECIFICAR") set[norm(t.residuo)] = t.residuo; });
     s.residuos = Object.values(set);
   });
+  if (reagrupadas) renderTarifas();
 }
 
 /** Empresas con tarifas activas (para el informe por empresa). */
@@ -1223,7 +1230,8 @@ function abrirFormTarifa(id, prefill, grupo) {
       (enGrupo && !t ? '' :
       campo("f_direccion", "Dirección del servicio", inp("f_direccion", v.direccion, 'placeholder="Calle, número, comuna" oninput="autoComuna()"'), "span2") +
       campo("f_comunas", multi ? "Comuna(s) <span class=\"muted\">· varias = una tarifa por cada una</span>" : "Comuna", mselHtml("f_comunas", { opciones: COMUNAS_LISTA, valores: comunas, unico: !!t, placeholder: "+ elegir comuna", onChange: autoRegion })) +
-      campo("f_region", "Región", '<input id="f_region" readonly tabindex="-1">')) +
+      campo("f_region", "Región", '<input id="f_region" list="regionDL" autocomplete="off" value="' + esc(v.region || "") + '" placeholder="Si no hay comuna">' +
+        '<datalist id="regionDL">' + REGIONES.map(r => '<option value="' + esc(r) + '">').join('') + '</datalist>')) +
       campo("f_precio", "Monto neto (sin IVA)", inp("f_precio", v.precio, 'inputmode="decimal" placeholder="Ej: 192000 o 3,5"')) +
       campo("f_moneda", "Moneda", sel("f_moneda", CATS.moneda, v.moneda)) +
       campo("f_cant", "Carga mínima – máxima <span class=\"muted\">· opcional</span>", '<div class="tf-dos">' + inp("f_cantidad_min", v.cantidad_min, 'inputmode="decimal" placeholder="mín"') + inp("f_cantidad_max", v.cantidad_max, 'inputmode="decimal" placeholder="máx"') + cargaUnidadSel("f_carga_unidad", tget(v, "carga_unidad")) + '</div>') +
@@ -1281,9 +1289,13 @@ function autoComuna() {
   const c = detectarComuna(document.getElementById("f_direccion").value);
   if (c && !mselValores("f_comunas").length) mselAgregar("f_comunas", c);
 }
+/** La región sale de la(s) comuna(s); sin comuna se puede elegir (o queda la que interpretó Claude). */
 function autoRegion() {
-  const el = document.getElementById("f_region");
-  if (el) el.value = unicosOrdenados(mselValores("f_comunas").map(regionDeComuna)).join(", ");
+  const el = document.getElementById("f_region"); if (!el) return;
+  const desdeComunas = unicosOrdenados(mselValores("f_comunas").map(regionDeComuna).filter(Boolean)).join(", ");
+  if (desdeComunas) { el.value = desdeComunas; el.dataset.auto = "1"; }
+  else if (el.dataset.auto) { el.value = ""; delete el.dataset.auto; }
+  el.readOnly = !!desdeComunas;
 }
 
 /** Devuelve una tarifa por cada combinación residuo × sucursal × comuna. */
@@ -1314,6 +1326,8 @@ function leerFormulario() {
   const conts = contenedores.length ? contenedores : [""];
   if (!residuos.length) throw new Error("Elige al menos un residuo.");
   const comunas = mselValores("f_comunas");
+  const regionForm = comunas.length ? "" : regionCanonica(g("f_region"));
+  if (!comunas.length && g("f_region") && !regionForm) throw new Error("Región no reconocida: " + g("f_region") + ".");
   const lista = [], nuevasSucursales = [];
   if (sucursales.length) {
     // Una tarifa por residuo × sucursal; la dirección sale de la sucursal (o del formulario si no la tiene).
@@ -1322,13 +1336,13 @@ function leerFormulario() {
       const d = sucursalInfo(base.cliente, su);
       const conocida = !FORM_ORIG && d && (d.direccion || d.comuna); // al editar una tarifa manda lo que se escribe
       const lugar = conocida ? { direccion: d.direccion, comuna: d.comuna, region: d.region }
-                             : { direccion: base.direccion, comuna: comunaForm, region: regionDeComuna(comunaForm) };
+                             : { direccion: base.direccion, comuna: comunaForm, region: regionDeComuna(comunaForm) || regionForm };
       if (!d || !d.enLista) nuevasSucursales.push(Object.assign({ empresa: base.cliente, sucursal: su }, lugar));
       residuos.forEach(r => conts.forEach(co => lista.push(Object.assign({}, base, lugar, { residuo: r, contenedor: co, sucursal: su }))));
     });
   } else {
     residuos.forEach(r => conts.forEach(co => (comunas.length ? comunas : [""]).forEach(c => {
-      lista.push(Object.assign({}, base, { residuo: r, contenedor: co, sucursal: "", comuna: c, region: regionDeComuna(c) }));
+      lista.push(Object.assign({}, base, { residuo: r, contenedor: co, sucursal: "", comuna: c, region: c ? regionDeComuna(c) : regionForm }));
     })));
   }
   return { lista, enClickUp: !!sup, residuos, sucursales, contenedores, nuevasSucursales };
@@ -1678,7 +1692,7 @@ function interpretarLineas(base, lineas) {
     }
     if (d.sucursal && !d.direccion && !d.comuna) { const si = sucursalInfo(d.cliente, d.sucursal); if (si) { d.direccion = si.direccion; d.comuna = si.comuna; } }
     if (!d.comuna && d.direccion) d.comuna = detectarComuna(d.direccion);
-    d.comuna = comunaCanonica(d.comuna); d.region = regionDeComuna(d.comuna);
+    d.comuna = comunaCanonica(d.comuna); d.region = regionDeComuna(d.comuna) || regionCanonica(d.region);
     d.precio = numDe(d.precio); d.cantidad_min = numDe(d.cantidad_min); d.cantidad_max = numDe(d.cantidad_max);
     d.moneda = String(d.moneda || "CLP").toUpperCase();
     // Esquema V2: tipo de servicio (o, si solo vienen los sí/no, deducido de ellos), sin valores por defecto

@@ -140,7 +140,8 @@ function faltantesMinimos(d) {
   if (vacio(d.fuente)) falta("tipo de fuente", "f_fuente");
   if (vacio(d.motivo_precio)) falta("motivo del precio", "f_motivo_precio");
   const general = norm(d.estado_servicio) === "VALORGENERAL";
-  if (vacio(d.comuna) && !general) falta("comuna de origen", "f_comunas"); // la referencial (Valor general) no exige lugar
+  // origen: la comuna o, si no se conoce (p. ej. lo que interpretó Claude), al menos la región; la referencial (Valor general) no exige lugar
+  if (vacio(d.comuna) && vacio(d.region) && !general) falta("comuna o región de origen", "f_comunas");
   // Comuna de destino: opcional por ahora (decisión 2026-10-21)
   if (norm(d.estado_servicio) === "ACTIVO" && (vacio(d.cliente) || vacio(d.sucursal))) falta("empresa y sucursal (servicio Activo)", "f_sucursales");
   if (UNIDADES_CON_CONTENEDOR.includes(String(d.unidad || "").toLowerCase())) {

@@ -167,7 +167,7 @@ function validarImportada(d) {
 function claveCarga(t, sinTratamiento) {
   const tipo = String(t.tipo || t.tipo_transaccion || "").toLowerCase() === "paga" ? "paga" : "cobra";
   const prov = tget(t, "proveedor_id") || "n:" + norm(t.proveedor_nombre);
-  return [prov, norm(t.cliente), norm(t.sucursal), t.sucursal ? "" : norm(t.comuna), norm(t.residuo), norm(t.unidad), contKey(t), tipo].join("|") + (servicioClave(t) ? "|" + servicioClave(t) : "") +
+  return [prov, norm(t.cliente), norm(t.sucursal), t.sucursal ? "" : norm(t.comuna) || (t.region ? "r:" + norm(t.region) : ""), norm(t.residuo), norm(t.unidad), contKey(t), tipo].join("|") + (servicioClave(t) ? "|" + servicioClave(t) : "") +
     (sinTratamiento ? "" : "|t:" + norm(tget(t, "tratamiento"))); // el tratamiento separa tarifas (Q7c)
 }
 

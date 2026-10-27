@@ -39,6 +39,21 @@ function comunaCanonica(comuna) {
   const x = COMUNAS_IDX[_normCom(comuna)];
   return x ? x.comuna : String(comuna || "").trim();
 }
+const REGIONES = Object.keys(REGIONES_COMUNAS);
+/** Nombre oficial de una región escrita libre ("RM", "Región del Bío Bío", "Libertador Gral. Bernardo O'Higgins"); "" si no se reconoce. */
+const _normReg = s => _normCom(s).replace(/\b(region|de|del)\b/g, " ").replace(/\s+/g, "");
+const REGIONES_ROMANOS = { xv: "Arica y Parinacota", i: "Tarapacá", ii: "Antofagasta", iii: "Atacama", iv: "Coquimbo", v: "Valparaíso", xiii: "Metropolitana",
+  vi: "O'Higgins", vii: "Maule", xvi: "Ñuble", viii: "Biobío", ix: "Araucanía", xiv: "Los Ríos", x: "Los Lagos", xi: "Aysén", xii: "Magallanes" };
+function regionCanonica(region) {
+  const k = _normReg(region);
+  if (!k) return "";
+  if (k === "rm" || k === "santiago") return "Metropolitana";
+  if (REGIONES_ROMANOS[k]) return REGIONES_ROMANOS[k];
+  if (k.startsWith("aisen")) return "Aysén";
+  // nombre exacto, o el nombre oficial dentro de uno largo ("Libertador General Bernardo O'Higgins", "Metropolitana de Santiago")
+  return REGIONES.find(r => _normReg(r) === k) ||
+    REGIONES.filter(r => _normReg(r).length >= 4 && k.includes(_normReg(r))).sort((a, b) => b.length - a.length)[0] || "";
+}
 
 /* Busca una comuna dentro de una dirección libre. Gana la que termina más al
    final ("Av. Pedro Aguirre Cerda 12968, Cerrillos" -> Cerrillos) y, si terminan
