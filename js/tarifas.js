@@ -39,12 +39,12 @@ const siNo = v => { const s = String(v || "").toLowerCase(); return s === "si" |
 function claveNombre(s) {
   return norm(String(s || "").replace(/\b(s\.?\s?p\.?\s?a\.?|ltda\.?|limitada|s\.?\s?a\.?|e\.?i\.?r\.?l\.?|y\s+c[ií]a\.?)\s*$/i, ""));
 }
-/** RUT sin puntos, guion ni espacios ("76.123.456-k" → "76123456K"); "" si no parece RUT. */
-const rutClave = rut => { const r = String(rut || "").toUpperCase().replace(/[^0-9K]/g, ""); return r.length >= 7 ? r : ""; };
+/** RUT de una ficha sin puntos, guion ni ceros a la izquierda (rutClave, js/sinader.js); "" si no parece RUT. */
+const rutFicha = rut => { const r = rutClave(rut); return r.length >= 7 ? r : ""; };
 /** Fichas de ClickUp con ese RUT (con o sin dígito verificador). Puede haber varias: una empresa con varias plantas. */
 function fichasPorRut(rut) {
-  const k = rutClave(rut); if (!k) return [];
-  return SUPPLIERS.filter(s => { const c = !s.sheetOnly && rutClave(s.rut); return c && (c === k || c.slice(0, -1) === k || c === k.slice(0, -1)); });
+  const k = rutFicha(rut); if (!k) return [];
+  return SUPPLIERS.filter(s => { const c = !s.sheetOnly && rutFicha(s.rut); return c && (c === k || c.slice(0, -1) === k || c === k.slice(0, -1)); });
 }
 /** La ficha de ese RUT; si el RUT es de varias fichas, la que calza por nombre (si ninguna calza, null). */
 function proveedorPorRut(rut, nombre) {
