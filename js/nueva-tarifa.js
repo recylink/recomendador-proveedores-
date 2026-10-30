@@ -39,16 +39,17 @@ function abrirNuevaTarifa(pre) {
     '<div class="nt-paso"><div class="nt-tit"><span class="nt-num">2</span> Residuos</div>' +
       mselHtml("n_res", { opciones: CATS.residuo || [], valores: (pre.residuos || []).filter(Boolean), otro: true, placeholder: "+ residuo", onChange: ntRender }) + '</div>' +
 
-    '<div class="nt-paso"><div class="nt-tit"><span class="nt-num">3</span> Tarifa referencial por residuo</div>' +
-      '<div class="muted small">Precio de lista del proveedor, sin cliente. Cada residuo tiene su destino y puede tener varios cobros (<b>+ otro cobro</b>), cada uno con su servicio, contenedor y volumen: p. ej. retiro en Batea 30 m³ y retiro en Tolva 20 m³. Deja el monto vacío en lo que no quieras fijar.</div>' +
+    '<div class="nt-paso"><div class="nt-tit"><span class="nt-num">3</span> Precio de lista por residuo</div>' +
+      '<div class="muted small">Lo que cobra el proveedor sin un cliente en particular. Un residuo puede tener varios cobros (<b>+ otro cobro</b>), por ejemplo retiro en Batea 30 m³ y en Tolva 20 m³. Deja vacío el monto que no quieras fijar.</div>' +
       '<div id="n_ref"></div>' +
-      '<details class="nt-cond" open><summary>Condiciones (aplican a la referencial y son la base de cada sucursal) · * obligatorias</summary><div class="tf-grid">' +
-        campo("n_fecha", "Fecha de la tarifa referencial *", '<input id="n_fecha" type="date" value="' + hoy + '">') +
+      '<div id="n_cond_box" hidden>' + // se muestra cuando hay al menos un residuo
+      '<details class="nt-cond" open><summary>Condiciones · * obligatorias</summary><div class="muted small">Aplican al precio de lista y son la base de cada sucursal del paso 4.</div><div class="tf-grid">' +
+        campo("n_fecha", "Fecha del precio *", '<input id="n_fecha" type="date" value="' + hoy + '">') +
         campo("n_motivo", "Motivo del precio *", sel("n_motivo", [["", "— elegir —"]].concat(MOTIVOS_PRECIO.map(x => [x, x])), "")) +
         campo("n_fuente", "Tipo de fuente *", selOtraHtml('id="n_fuente"', fuentesLista(), "", "— elegir —")) +
         campo("n_fuente_ref", "Referencia de la fuente <span class=\"muted\">· opcional</span>", inp("n_fuente_ref", "", 'placeholder="Ej: Cotización N° 123 del 15-10-2026"')) +
         campo("n_pago", "Condición de pago (días) <span class=\"muted\">· si lo dejas vacío: 120 días para Euro Constructora, 30 para el resto</span>", inp("n_pago", "", 'inputmode="numeric"')) +
-        campo("n_ref_comuna", "Comuna de origen de la referencial", inp("n_ref_comuna", "", 'list="ntComunaDL" autocomplete="off" placeholder="Si aplica a una comuna"')) +
+        campo("n_ref_comuna", "Comuna de origen", inp("n_ref_comuna", "", 'list="ntComunaDL" autocomplete="off" placeholder="Si aplica a una comuna"')) +
         campo("n_ref_region", "…o región de origen", sel("n_ref_region", [["", "— elegir —"]].concat(Object.keys(REGIONES_COMUNAS).map(x => [x, x])), "")) +
         campo("n_vigente", "Vigente hasta <span class=\"muted\">· opcional</span>", '<input id="n_vigente" type="date">') +
         campo("n_carga", "Carga mínima – máxima <span class=\"muted\">· opcional</span>", '<div class="tf-dos">' + inp("n_carga_min", "", 'inputmode="decimal" placeholder="mín"') + inp("n_carga_max", "", 'inputmode="decimal" placeholder="máx"') + cargaUnidadSel("n_carga_unidad", "") + '</div>') +
@@ -56,14 +57,14 @@ function abrirNuevaTarifa(pre) {
         campo("n_detalle", "Detalle del cobro (por qué cobra eso, condiciones)", '<textarea id="n_detalle" rows="2"></textarea>', "span2") +
         campo("n_valor_agregado", "Valor agregado <span class=\"muted\">· CO₂ evitado, material recuperado, trazabilidad…</span>", '<textarea id="n_valor_agregado" rows="2"></textarea>', "span2") +
       '</div></details>' +
-      '<div class="nt-adj-box"><div class="nt-adj-tit">PDF respaldo de la referencial <span class="muted small">· también sirve para las sucursales que no tengan uno propio para ese residuo</span></div><div id="n_adj_REF"></div></div></div>' +
+      '<div class="nt-adj-box"><div class="nt-adj-tit">PDF de respaldo <span class="muted small">· también sirve para las sucursales que no tengan uno propio para ese residuo</span></div><div id="n_adj_REF"></div></div></div></div>' +
 
-    '<details class="nt-paso nt-cli" id="n_cli_det"' + (pre.abrirCliente ? ' open' : '') + ' ontoggle="ntResumen()"><summary class="nt-tit"><span class="nt-num">4</span> Detalle por empresa-sucursal <span class="muted small">(opcional · carga masiva por sucursales)</span></summary>' +
+    '<details class="nt-paso nt-cli" id="n_cli_det"' + (pre.abrirCliente ? ' open' : '') + ' ontoggle="ntResumen()"><summary class="nt-tit"><span class="nt-num">4</span> Precios para un cliente <span class="muted small">(opcional · una o varias sucursales)</span></summary>' +
       '<div class="tf-grid">' +
         campo("n_emp", "Empresa", inp("n_emp", pre.cliente || "", 'list="clienteDL" autocomplete="off" placeholder="Ej: COPEC" oninput="ntEmpresaCambio()"')) +
         campo("n_estado", "Estado del servicio", sel("n_estado", estadosCli, pre.estado_servicio && norm(pre.estado_servicio) !== "VALORGENERAL" ? pre.estado_servicio : "Activo")) +
         campo("n_estcli", "Estado del cliente", sel("n_estcli", CATS.estado_cliente || ["activo"], "activo")) +
-        campo("n_fecha_cli", "Fecha de la tarifa (fecha del costo) *", '<input id="n_fecha_cli" type="date" value="' + hoy + '" oninput="ntRender()">' +
+        campo("n_fecha_cli", "Fecha del precio *", '<input id="n_fecha_cli" type="date" value="' + hoy + '" oninput="ntRender()">' +
           '<label class="chk nt-chk"><input type="checkbox" id="n_fpsuc" onchange="ntRender()"> Una fecha distinta por sucursal</label>') +
         campo("n_sucs", "Sucursales <span class=\"muted\">· cada una con sus condiciones y precios</span>", mselHtml("n_sucs", { opciones: sucursalesDe(pre.cliente || ""), valores: [], otro: true, placeholder: "+ sucursal", onChange: ntRender }), "span2") +
       '</div>' +
@@ -246,7 +247,8 @@ function ntRender() {
   const actuales = {};
   if (s) referenciales(tarifasDeProveedor(s)).forEach(f => { if (f.conPrecio) actuales[ntK(f.residuo)] = f; });
   const cab = ntCab;
-  const vacio = '<div class="muted small nt-vacio">Elige al menos un residuo en el paso 2.</div>';
+  const vacio = '<div class="muted small nt-vacio">Elige al menos un residuo en el paso 2 para ingresar precios y condiciones.</div>';
+  document.getElementById("n_cond_box").hidden = !residuos.length;
   document.getElementById("n_ref").innerHTML = residuos.length ? '<div class="tscroll"><table class="ttar nt-tab">' + cab + residuos.map(r => {
     const k = ntK(r), a = actuales[k], filas = [];
     for (let i = 0; i < ntNRef(k); i++) {
@@ -397,7 +399,7 @@ function ntArmar() {
   const lista = [], nuevasSucursales = [];
   // 3 · referenciales: una por residuo con monto (× contenedor), con las condiciones comunes
   residuos.forEach(r => { const k = ntK(r); for (let i = 0; i < ntNRef(k); i++) {
-    const v = NT.ref[k + "#" + i] || {}; const monto = num(v.monto || "", r + " (referencial)");
+    const v = NT.ref[k + "#" + i] || {}; const monto = num(v.monto || "", r + " (precio de lista)");
     if (monto === "") continue;
     const dest = NT.dest[k] || "";
     lista.push(Object.assign({}, base, { residuo: r, contenedor: v.cont || "", precio: monto, moneda: v.moneda || "CLP", unidad: v.unidad || "",
@@ -443,7 +445,7 @@ function ntResumen() {
   const st = document.getElementById("n_status"); if (!st || !NT) return;
   try {
     const a = ntArmar();
-    st.textContent = a.lista.length ? "Se crearán " + a.lista.length + " tarifa(s): " + a.nRef + " referencial(es)" + (a.nCli ? " + " + a.nCli + " por cliente" : "") + "." + (a.sinMonto ? " " + a.sinMonto + " cobro(s) sin monto en sucursales se omiten." : "") +
+    st.textContent = a.lista.length ? "Se crearán " + a.lista.length + " tarifa(s): " + a.nRef + " de precio de lista" + (a.nCli ? " + " + a.nCli + " por cliente" : "") + "." + (a.sinMonto ? " " + a.sinMonto + " cobro(s) sin monto en sucursales se omiten." : "") +
       (a.lista.length ? " " + a.lista.filter(d => d._pdf).length + " con PDF respaldo." : "") : "Ingresa al menos un monto.";
   } catch (e) { st.textContent = /Falta el proveedor|al menos un residuo/.test(e.message) ? "Completa el proveedor y elige sus residuos." : e.message; }
 }
@@ -457,11 +459,11 @@ async function ntGuardar() {
   const st = document.getElementById("n_status"), btn = document.getElementById("n_guardar");
   try {
     const a = ntArmar();
-    if (!a.lista.length) throw new Error("Ingresa al menos un monto (referencial o por sucursal).");
+    if (!a.lista.length) throw new Error("Ingresa al menos un monto (precio de lista o por sucursal).");
     const faltan = a.lista.map(d => ({ d, f: faltantesMinimos(d) })).find(x => x.f.length);
     if (faltan) throw new Error(textoFaltantes(faltan.d, faltan.f));
     if (a.lista.length > 200) throw new Error("Son " + a.lista.length + " tarifas; el máximo por carga es 200. Divide la carga.");
-    if (a.lista.length > 1 && !confirm("Se crearán " + a.lista.length + " tarifas (" + a.nRef + " referenciales" + (a.nCli ? " y " + a.nCli + " por cliente" : "") + ")" + (a.enClickUp ? "" : " y antes se creará la ficha del proveedor en ClickUp") + ". ¿Continuar?")) return;
+    if (a.lista.length > 1 && !confirm("Se crearán " + a.lista.length + " tarifas (" + a.nRef + " de precio de lista" + (a.nCli ? " y " + a.nCli + " por cliente" : "") + ")" + (a.enClickUp ? "" : " y antes se creará la ficha del proveedor en ClickUp") + ". ¿Continuar?")) return;
     if (!sesionActiva()) await iniciarSesion();
     if (!a.enClickUp) { ntPedirFicha(a); return; } // paso siguiente obligatorio: la ficha en ClickUp
     btn.disabled = true;
