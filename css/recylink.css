@@ -42,12 +42,12 @@ a:hover { color:var(--rl-action-hover); text-decoration:underline; }
 #viewProv, #viewTar, #viewSin { max-width:1280px; margin:0 auto; padding:28px 32px 40px; }
 
 /* ---- botones (Button del design system) ----------------------------------- */
-.cbtn, .rb-save, .repbar button, .modaltools button { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 18px; font:600 14px/1 var(--rl-font); border-radius:8px; border:1px solid transparent; background:var(--rl-action); color:#fff; box-shadow:var(--rl-shadow-xs); cursor:pointer; transition:background .15s ease, box-shadow .15s ease; }
-.cbtn:hover, .rb-save:hover, .modaltools button:hover { background:var(--rl-action-hover); }
+.cbtn, .rb-save { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:10px 18px; font:600 14px/1 var(--rl-font); border-radius:8px; border:1px solid transparent; background:var(--rl-action); color:#fff; box-shadow:var(--rl-shadow-xs); cursor:pointer; transition:background .15s ease, box-shadow .15s ease; }
+.cbtn:hover, .rb-save:hover { background:var(--rl-action-hover); }
 .cbtn:active, .rb-save:active { background:var(--rl-action-active); }
 .cbtn:disabled, .rb-save:disabled { background:var(--rl-gray-100); color:var(--rl-gray-400); box-shadow:none; opacity:1; }
-.cbtn.sec, .tar-actions .sec, .modaltools button.sec, .repbar button, .ct-editar, .ct-nueva { background:#fff; color:var(--rl-action); border:1px solid var(--rl-gray-300); box-shadow:var(--rl-shadow-xs); }
-.cbtn.sec:hover, .tar-actions .sec:hover, .modaltools button.sec:hover, .repbar button:hover, .ct-editar:hover, .ct-nueva:hover { background:var(--rl-gray-50); }
+.cbtn.sec, .tar-actions .sec, .ct-editar, .ct-nueva { background:#fff; color:var(--rl-action); border:1px solid var(--rl-gray-300); box-shadow:var(--rl-shadow-xs); }
+.cbtn.sec:hover, .tar-actions .sec:hover, .ct-editar:hover, .ct-nueva:hover { background:var(--rl-gray-50); }
 .cbtn.mini, .ct-editar, .ct-clickup, .ct-nueva { padding:7px 12px; font:600 12px/1 var(--rl-font); border-radius:8px; }
 .cbtn { margin-top:0; }
 .lnk { color:var(--rl-action); font-size:13px; font-weight:600; }
@@ -71,13 +71,11 @@ select:focus, input:focus, textarea:focus { outline:none; border-color:var(--rl-
 .mchip button { color:var(--rl-blue-700); }
 .mchip button:hover { background:var(--rl-blue-100); }
 
-/* ---- barra de estado, contador e informe ---------------------------------- */
+/* ---- barra de estado y contador -------------------------------------------- */
 .bar { height:4px; background:var(--rl-gray-100); margin:0; border-radius:999px; }
 .bar > div { background:var(--rl-action); }
 .status-msg { font-size:12px; color:var(--rl-gray-500); margin:8px 0 12px; }
 .status-msg.err { color:#B42318; font-weight:600; }
-.repbar { position:static; background:none; border:none; padding:0; margin:0 0 4px; justify-content:space-between; }
-.repbar .toggle-hint { order:-1; font-size:13px; color:var(--rl-gray-500); }
 .count { font-size:14px; color:var(--rl-gray-600); margin:0 0 16px; }
 
 /* ---- tarjeta de proveedor --------------------------------------------------- */

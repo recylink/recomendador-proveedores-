@@ -321,3 +321,7 @@ tr.his-ant td { color:#667085; }
 .cbx-lista li:hover, .cbx-lista li.on { background:#EEF6FB; }
 .cbx-lista li[aria-selected="true"] { font-weight:600; color:var(--rl-action); }
 .cbx-lista li.cbx-vacio { color:var(--rl-gray-500); cursor:default; }
+
+/* Comparar: toda la fila del proveedor abre su detalle */
+#tarComparar tr:has(> td .cmp-prov) { cursor:pointer; }
+#tarComparar tr:has(> td .cmp-prov):hover > td { background:var(--rl-gray-50); }

@@ -106,7 +106,7 @@ function ntTarifasExistentesHtml(nombre, s) {
     filas.slice(0, max).map(t => '<tr><td>' + esc(t.residuo || "-") + '</td><td>' + (t.tipo === "paga" ? '<span class="pill p-paga">paga</span>' : 'cobra') + '</td>' +
       '<td class="num">' + precioHtml(t) + '</td>' +
       '<td>' + (esGeneral(t) ? '<span class="pill es-valorgeneral">Valor general</span>' : esc([t.cliente, t.sucursal].filter(Boolean).join(" · ") || "-")) + '</td>' +
-      '<td class="small">' + esc(t.fecha || "-") + '</td></tr>').join('') +
+      '<td class="small">' + esc(fmtFecha(t.fecha) || "-") + '</td></tr>').join('') +
     '</table></div>' + (filas.length > max ? '<div class="muted small">Se muestran ' + max + ' de ' + filas.length + '. Revisa el resto en la pestaña Tarifas.</div>' : '') +
   '</details>';
 }

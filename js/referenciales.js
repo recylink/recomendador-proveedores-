@@ -214,7 +214,7 @@ function referencialRegiones(ts) {
     const mk = mercado().unid[claveUnidad(t0)];
     filas.push({ tipo: "unidad", residuo: t0.residuo || "(sin residuo)", servicio: t0.tipo_servicio, region: t0.region || "", unidad: t0.unidad, paga: t0.tipo === "paga", tratamiento: tget(t0, "tratamiento"),
       contenedor: unicosOrdenados(l.map(contenedorTxt)).join(", "), valor, mercado: mk && mk.n > 0 ? mk : null, genId: genT ? genT.id : "", t0,
-      porQue: genT ? "Fijada por " + String(tget(genT, "actualizado_por") || tget(genT, "creado_por")).replace(/@.*/, "") + " el " + String(tget(genT, "actualizado_el") || genT.fecha).slice(0, 10) +
+      porQue: genT ? "Fijada por " + String(tget(genT, "actualizado_por") || tget(genT, "creado_por")).replace(/@.*/, "") + " el " + fmtFecha(String(tget(genT, "actualizado_el") || genT.fecha).slice(0, 10)) +
         (tget(genT, "motivo_precio") ? " · motivo: " + genT.motivo_precio.toLowerCase() : "") + (tget(genT, "detalle") ? " · " + String(genT.detalle).replace(/\s+/g, " ").slice(0, 120) : "")
         : vals.length ? porQueTexto(base, vals.length, t0.region, "tarifa") : "Sin precio",
       conf: confianzaDe(base), tarifas: base });
@@ -403,7 +403,7 @@ function cmpToggle(k, irA) {
 /** Nombre del proveedor como botón que despliega su detalle (desde la barra baja hasta el detalle en la tabla). */
 function cmpNombreHtml(nombre, k, irA) {
   const ab = CMP_ABIERTOS.has(k);
-  return '<button type="button" class="cmp-prov" aria-expanded="' + ab + '" onclick="cmpToggle(' + esc(JSON.stringify(k)) + ',' + !!irA + ')"><b>' + esc(nombre) + '</b> <span class="cmp-flecha">' + (ab ? "▾" : "▸") + '</span></button>';
+  return '<button type="button" class="cmp-prov" aria-expanded="' + ab + '" onclick="cmpToggle(' + esc(JSON.stringify(k)) + ',' + !!irA + ')"><b>' + esc(nombreLindo(nombre)) + '</b> <span class="cmp-flecha">' + (ab ? "▾" : "▸") + '</span></button>';
 }
 /** Abre el Historial de precios con este proveedor, residuo y servicio. */
 function cmpVerHistorial(o) {
@@ -415,7 +415,7 @@ function cmpTarifasTabla(ts) {
     ts.slice().sort((a, b) => String(a.cliente + a.sucursal).localeCompare(String(b.cliente + b.sucursal), "es") || String(a.tipo_servicio).localeCompare(String(b.tipo_servicio), "es")).map(t =>
       '<tr><td>' + (esGeneral(t) ? '<span class="muted">Valor general</span>' : esc([t.cliente, t.sucursal].filter(Boolean).join(" · ") || "-")) + '<div class="muted small">' + esc(t.comuna || "") + '</div></td>' +
       '<td>' + esc(t.tipo_servicio || "-") + '<div class="muted small">' + esc(contenedorTxt(t) || "") + '</div>' + tratSubHtml(tget(t, "tratamiento")) + marcasV3Html(t) + '</td>' +
-      '<td class="num">' + precioHtml(t) + '</td><td class="small">' + esc(t.fecha || "-") + '</td>' +
+      '<td class="num">' + precioHtml(t) + '</td><td class="small">' + esc(fmtFecha(t.fecha) || "-") + '</td>' +
       '<td class="small">' + esc([t.fuente, tget(t, "fuente_ref")].filter(Boolean).join(" · ") || "-") + (tget(t, "motivo_precio") ? '<div class="muted small">' + esc(t.motivo_precio) + '</div>' : '') +
         (t.pdf_url ? '<a href="' + esc(t.pdf_url) + '" target="_blank" rel="noopener">PDF ↗</a>' : '') + '</td>' +
       '<td class="small">' + esc(tget(t, "destino") || "—") + '</td></tr>' +
@@ -589,3 +589,11 @@ function renderComparar() {
       '</table></div>' +
       '<div class="muted small">Cada proveedor se calcula por separado (nunca se mezcla el retiro de uno con la disposición de otro, ni dos tratamientos de un mismo proveedor): la barra es la mediana de todas sus sucursales en la región; la tabla separa cada contenedor, con el rango entre sus sucursales. Los contenedores chicos cuestan más por m³. Peoneta, servicio de faena e hidrojet se cobran por viaje y se suman al retiro. El arriendo se prorratea con ' + RETIROS_MES + ' retiros al mes. Disposición por kg llevada a m³ con la densidad del residuo' + (densidadDe(CMP.residuo) ? ' (' + fmtNum(densidadDe(CMP.residuo).kgm3, 0) + ' kg/m³)' : '') + '.</div></div>');
 }
+
+/* Clic en cualquier parte de la fila de un proveedor (no solo en su nombre) abre o cierra su detalle. */
+document.addEventListener("click", e => {
+  const tr = e.target.closest("#tarComparar tr");
+  if (!tr || e.target.closest("button, a, input, select, label, .cbx, .cmp-det-fila")) return;
+  const btn = tr.querySelector(":scope > td .cmp-prov");
+  if (btn) btn.click();
+});

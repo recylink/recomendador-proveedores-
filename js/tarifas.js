@@ -35,6 +35,39 @@ function numDe(v) {
 }
 const siNo = v => { const s = String(v || "").toLowerCase(); return s === "si" || s === "sí" ? "si" : s === "no" ? "no" : ""; };
 
+/** Fecha para mostrar: "2026-10-21" → "21 oct 2026" (con hora si la trae: "21 oct 2026 15:40"). Otro formato queda igual. */
+const MESES_FECHA = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+function fmtFecha(v, conHora) {
+  let s = String(v == null ? "" : v).trim();
+  if (/^\d{4}-\d{2}-\d{2}T.*Z$/.test(s)) { // hora UTC → hora local de quien mira
+    const d = new Date(s);
+    if (!isNaN(d)) s = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().replace("Z", "");
+  }
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+  if (!m || +m[2] < 1 || +m[2] > 12) return s;
+  return +m[3] + " " + MESES_FECHA[+m[2] - 1] + " " + m[1] + (conHora && m[4] ? " " + m[4] + ":" + m[5] : "");
+}
+
+/** Nombre para mostrar: si viene TODO en mayúsculas o todo en minúsculas, se pasa a mayúscula inicial
+ *  ("CIUDAD LIMPIA" → "Ciudad Limpia", "cirklachile" → "Cirklachile"). Si ya trae mezcla, se respeta. El dato no cambia. */
+const SIGLAS_NOMBRE = new Set(["SA", "S.A.", "SPA", "EIRL", "LTDA", "RAEE", "RESPEL", "RCD", "PET", "HDPE", "LDPE", "PEAD", "PEBD", "PP", "PS", "PVC", "EPS", "HC", "ISO", "REP", "RM", "CDL", "CDC", "NFU", "TI", "II", "III", "IV", "VI", "VII", "VIII", "IX", "XI", "XII", "XIV", "XV", "XVI"]);
+const MENORES_NOMBRE = new Set(["de", "del", "la", "las", "los", "el", "y", "e", "en", "para", "por", "con", "a", "o"]);
+function nombreLindo(v) {
+  const s = String(v == null ? "" : v).trim();
+  const letras = s.replace(/[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g, "");
+  if (!letras || (letras !== letras.toUpperCase() && letras !== letras.toLowerCase())) return s;
+  if (letras === letras.toUpperCase() && /^\S+$/.test(s) && letras.length <= 4) return s; // sigla: "ABC", "SGS"
+  return s.toLowerCase().split(/(\s+|-|\/)/).map((w, i) => {
+    if (!w.trim() || w === "-" || w === "/") return w;
+    const up = w.toUpperCase();
+    if (up === "SPA") return "SpA";
+    if (up === "LTDA" || up === "LTDA.") return "Ltda" + (w.endsWith(".") ? "." : "");
+    if (SIGLAS_NOMBRE.has(up) || /\d/.test(w) || /&/.test(w) || /^([a-z]\.)+[a-z]?\.?$/i.test(w)) return up;
+    if (i > 0 && MENORES_NOMBRE.has(w)) return w;
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }).join("");
+}
+
 /* ---------------- nombres de proveedores y empresas ---------------- */
 /** Clave para comparar nombres sin razón social: "Vuelta Verde Ltda." = "VUELTA VERDE" = "Vuelta Verde SpA". */
 function claveNombre(s) {
@@ -582,12 +615,12 @@ function filaTarifaHtml(t, opts) {
       (tget(t, "valor_agregado") ? '<div class="t-detalle-txt"><b>Valor agregado:</b> ' + esc(t.valor_agregado) + '</div>' : '') + '</td>' : '') +
     '<td>' + esc(lugar || "-") + (cant ? '<div class="muted small">cant. ' + esc(cant) + '</div>' : '') + '</td>' +
     '<td class="num">' + precioHtml(t) + '</td>' +
-    '<td><span class="small">' + esc(t.fecha || "-") + '</span><div class="muted small">' + esc(t.fuente || "") + (t.pdf_url ? ' · <a href="' + esc(t.pdf_url) + '" target="_blank" rel="noopener">PDF</a>' : '') + '</div></td>' +
+    '<td><span class="small">' + esc(fmtFecha(t.fecha) || "-") + '</span><div class="muted small">' + esc(t.fuente || "") + (t.pdf_url ? ' · <a href="' + esc(t.pdf_url) + '" target="_blank" rel="noopener">PDF</a>' : '') + '</div></td>' +
     '<td>' + alertaHtml(t) + '</td>' +
     '<td class="acc">' +
       '<button class="lnk" onclick="abrirFormTarifa(\'' + esc(t.id) + '\')">Editar</button>' +
       '<button class="lnk" onclick="verHistorial(\'' + esc(t.id) + '\')">Historial</button>' +
-      '<div class="muted small">' + esc((t.actualizado_el || "").slice(0, 10)) + ' · ' + esc((t.actualizado_por || "").replace(/@.*/, "")) + '</div>' +
+      (t.actualizado_el ? '<div class="muted small">editada el ' + esc(fmtFecha(String(t.actualizado_el).slice(0, 10))) + (t.actualizado_por ? ' · ' + esc(String(t.actualizado_por).replace(/@.*/, "")) : '') + '</div>' : '') +
       // separado de Editar para no apretarlo por error; pide confirmación con el detalle de la tarifa
       '<button class="lnk danger acc-eliminar" onclick="eliminarTarifa(\'' + esc(t.id) + '\')">' + ICO_PAPELERA + ' Eliminar</button>' +
     '</td></tr>';
@@ -616,7 +649,7 @@ function listaCorta(vals, max) {
 }
 let GRUPO_SEQ = 0;
 /**
- * Fila compacta de un grupo de tarifas (mismas condiciones): Proveedor · Residuos · Costo · Empresa · Actualizado.
+ * Fila compacta de un grupo de tarifas (mismas condiciones): Proveedor · Residuos · Costo · Empresa · Fecha del dato.
  * Al hacer clic se despliega el detalle (contenedor, transporte/disposición, sucursales, lugar, dirección, PDF)
  * y las tarifas individuales con sus acciones.
  */
@@ -626,17 +659,17 @@ function filaGrupoHtml(ts, opts) {
   const t0 = ts.slice().sort((a, b) => String(b.actualizado_el || b.fecha).localeCompare(String(a.actualizado_el || a.fecha)))[0];
   const alertas = [...new Set(ts.flatMap(t => t.alertas || []))];
   const pdfs = unicosOrdenados(ts.map(t => t.pdf_url));
-  const actualizado = String(t0.actualizado_el || t0.fecha || "").slice(0, 10);
+  const fechaDato = ts.map(t => String(t.fecha || "").slice(0, 10)).filter(Boolean).sort().pop() || ""; // fecha de la tarifa (cotización), no de la edición
   const columnas = opts.sinProveedor ? 4 : 5;
   const principal =
     '<tr class="t-fila ' + (t0.activo ? "" : "t-baja ") + (t0.vigente || !t0.activo ? "" : "t-anterior ") + '" onclick="verDetalle(\'' + gid + '\', this)">' +
-      (opts.sinProveedor ? '' : '<td><span class="t-flecha">▸</span> <b>' + esc(t0.proveedor_nombre || "-") + '</b>' +
+      (opts.sinProveedor ? '' : '<td><span class="t-flecha">▸</span> <b>' + esc(nombreLindo(t0.proveedor_nombre) || "-") + '</b>' +
         (alertas.length ? ' ' + alertaBadge(ts) : '') + '</td>') +
       '<td>' + (opts.sinProveedor ? '<span class="t-flecha">▸</span> ' : '') + listaCorta(ts.map(t => t.residuo), 4) +
         (t0.tipo === "paga" ? ' <span class="pill p-paga">paga</span>' : '') + '</td>' +
       '<td class="num">' + precioHtml(t0) + '</td>' +
       '<td>' + (t0.cliente ? esc(t0.cliente) : (esGeneral(t0) ? '<span class="muted">Valor general</span>' : '<span class="muted">-</span>')) + '</td>' +
-      '<td class="small">' + esc(actualizado) + '</td>' +
+      '<td class="small">' + esc(fmtFecha(fechaDato) || "-") + '</td>' +
     '</tr>';
   const lista = (vals, max) => listaCorta(vals, max) || '<span class="muted">-</span>';
   const dato = (etq, html) => '<div class="t-dato"><span class="t-etq">' + etq + '</span>' + html + '</div>';
@@ -652,7 +685,7 @@ function filaGrupoHtml(ts, opts) {
         dato("Destino", lista(ts.map(t => [t.destino, t.comuna_destino].filter(Boolean).join(" · ")), 3)) +
         dato("Estado del servicio", estadoServicioPill(t0) || '<span class="muted">-</span>') +
         dato("PDF", pdfs.length ? pdfs.map((u, i) => '<a href="' + esc(u) + '" target="_blank" rel="noopener">PDF' + (pdfs.length > 1 ? ' ' + (i + 1) : '') + '</a>').join(' · ') : '<span class="muted">sin PDF</span>') +
-        dato("Fuente", esc(t0.fuente || "-") + (tget(t0, "fuente_ref") ? ' · ' + esc(t0.fuente_ref) : '') + (t0.fecha ? ' · fecha de la tarifa ' + esc(t0.fecha) : '')) +
+        dato("Fuente", esc(t0.fuente || "-") + (tget(t0, "fuente_ref") ? ' · ' + esc(t0.fuente_ref) : '') + (t0.fecha ? ' · fecha de la tarifa ' + esc(fmtFecha(t0.fecha)) : '')) +
         detallesCobroHtml(ts) +
       '</div>' +
       tablaSucursalesHtml(ts) +
@@ -871,7 +904,7 @@ function verDetalle(gid, tr) {
   tr.classList.toggle("abierta", abrir);
 }
 function encabezadoCompacto(sinProveedor) {
-  return '<tr>' + (sinProveedor ? '' : '<th>Proveedor</th>') + '<th>Residuos</th><th class="num">Costo</th><th>Empresa</th><th>Actualizado</th></tr>';
+  return '<tr>' + (sinProveedor ? '' : '<th>Proveedor</th>') + '<th>Residuos</th><th class="num">Costo</th><th>Empresa</th><th>Fecha del dato</th></tr>';
 }
 
 /** Valores únicos sin distinguir mayúsculas/tildes; gana la forma más usada ("Euro Constructora" sobre "Euro constructora"). */
@@ -950,7 +983,7 @@ function renderTarifas() {
   const verAnt = chk("tfAnteriores"), verBaja = false, soloAl = chk("tfAlertas");
 
   const ufInfo = document.getElementById("ufInfo");
-  if (ufInfo) ufInfo.textContent = UF.valor ? "UF " + fmtCLP(UF.valor) + " (" + UF.fecha + ", " + UF.origen + ")" : "UF no disponible: los precios en UF no se convierten";
+  if (ufInfo) ufInfo.textContent = UF.valor ? "UF " + fmtCLP(UF.valor) + " (" + fmtFecha(UF.fecha) + ", " + UF.origen + ")" : "UF no disponible: los precios en UF no se convierten";
 
   const lista = TARIFAS.filter(t => (t.activo || verBaja)
     && (!fRes.length || fRes.indexOf(norm(t.residuo)) !== -1)
@@ -970,7 +1003,7 @@ function renderTarifas() {
   const provs = orden.map(k => porProv[k]).sort((a, b) => String(a[0].proveedor_nombre).localeCompare(String(b[0].proveedor_nombre), "es"));
   document.getElementById("tarCount").textContent = provs.length + (provs.length === 1 ? " proveedor · " : " proveedores · ") + lista.length + (lista.length === 1 ? " tarifa" : " tarifas");
   box.innerHTML = '<div class="tgrupo"><div class="tscroll"><table class="ttar t-compacta">' +
-    '<tr><th>Proveedor</th><th>Residuos</th><th>Tarifa referencial</th><th>Empresas</th><th>Actualizado</th></tr>' +
+    '<tr><th>Proveedor</th><th>Residuos</th><th>Tarifa referencial</th><th>Empresas</th><th>Fecha del dato</th></tr>' +
     provs.map(filaProveedorHtml).join('') + '</table></div></div>';
   const cmp = document.getElementById("tarComparar");
   if (cmp && cmp.style.display !== "none") renderComparar();
@@ -1000,15 +1033,15 @@ function filaProveedorHtml(ts) {
     ? conPrecio.slice(0, 3).map(f => '<div class="small ref-linea">' + resTag(f.residuo) + (f.region ? ' <span class="muted">' + esc(f.region) + '</span>' : '') + ' <b class="' + (f.paga ? "t-paga" : "") + '">' + fmtCLP(f.valor) + '</b> <span class="muted">/ ' + esc(f.tipo === "m3" ? "m³" : f.unidad || "") + '</span>' + (f.fuera ? ' <span class="t-alerta" title="' + esc(f.fuera.txt) + ': puede ser un error de carga">⚠</span>' : '') + '</div>').join('') + (conPrecio.length > 3 ? '<div class="muted small">+' + (conPrecio.length - 3) + ' más</div>' : '')
     : '<span class="muted">sin precio</span>';
   const empresas = unicosOrdenados(ts.filter(t => !esGeneral(t)).map(t => empresaVisible(t.cliente)));
-  const actualizado = ts.map(t => String(t.actualizado_el || t.fecha || "").slice(0, 10)).sort().pop();
+  const fechaDato = ts.map(t => String(t.fecha || "").slice(0, 10)).filter(Boolean).sort().pop(); // fecha de la tarifa (cotización), no de la edición
   const principal =
     '<tr class="t-fila" onclick="verDetalle(\'' + gid + '\', this)">' +
-      '<td><span class="t-flecha">▸</span> <b>' + esc(t0.proveedor_nombre || "-") + '</b>' + (alertas ? ' ' + alertaBadge(ts, alertas) : '') +
+      '<td><span class="t-flecha">▸</span> <b>' + esc(nombreLindo(t0.proveedor_nombre) || "-") + '</b>' + (alertas ? ' ' + alertaBadge(ts, alertas) : '') +
         '<div class="muted small">' + ts.length + ' tarifa' + (ts.length > 1 ? 's' : '') + '</div>' + contactoCortoTarifa(t0) + '</td>' +
       '<td>' + residuosFilaHtml(t0, ts) + '</td>' +
       '<td class="num">' + refCorta + '</td>' +
       '<td>' + (empresas.length ? listaCorta(empresas, 3) : '<span class="muted">Valor general</span>') + '</td>' +
-      '<td class="small">' + esc(actualizado || "-") + '</td>' +
+      '<td class="small">' + esc(fmtFecha(fechaDato) || "-") + '</td>' +
     '</tr>';
   const orden = t => [esGeneral(t) ? "0" : "1", t.cliente, t.sucursal, t.residuo, t.vigente ? "0" : "1"].map(v => String(v || "")).join("|");
   const filas = ts.slice().sort((a, b) => orden(a).localeCompare(orden(b), "es"));
@@ -1081,8 +1114,6 @@ function aplicarTarifasAProveedores() {
   if (reagrupadas) renderTarifas();
 }
 
-/** Empresas con tarifas activas (para el informe por empresa). */
-function empresasConTarifas() { return unicosOrdenados(TARIFAS.filter(t => t.activo).map(t => t.cliente)); }
 
 /**
  * Tarifa referencial por residuo y unidad (solo vigentes): el "Valor general" ingresado a mano si existe;
@@ -1607,7 +1638,7 @@ async function verHistorial(id) {
     const nombreAccion = { crear: "Creó la tarifa", editar: "Editó", baja: "Dio de baja", restaurar: "Restauró", eliminar: "Eliminó (copia de sus datos)" };
     abrirModal("histModal", '<h3>Historial de ' + esc(id) + '</h3>' + (rows.length
       ? '<div class="tscroll"><table class="ttar"><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Campo</th><th>Antes</th><th>Después</th></tr>' +
-        rows.map(h => '<tr><td class="small">' + esc(h.fecha) + '</td><td class="small">' + esc(h.usuario) + '</td><td>' + esc(nombreAccion[h.accion] || h.accion) + '</td><td>' + (h.campo === "*" ? "" : esc(h.campo)) + '</td><td>' + (h.accion === "crear" ? "" : esc(h.valor_anterior)) + '</td><td>' + (h.accion === "crear" ? "" : esc(h.valor_nuevo)) + '</td></tr>').join('') + '</table></div>'
+        rows.map(h => '<tr><td class="small">' + esc(fmtFecha(h.fecha, true)) + '</td><td class="small">' + esc(h.usuario) + '</td><td>' + esc(nombreAccion[h.accion] || h.accion) + '</td><td>' + (h.campo === "*" ? "" : esc(h.campo)) + '</td><td>' + (h.accion === "crear" ? "" : esc(h.valor_anterior)) + '</td><td>' + (h.accion === "crear" ? "" : esc(h.valor_nuevo)) + '</td></tr>').join('') + '</table></div>'
       : '<p class="muted">Sin registros (puede tardar unos segundos en aparecer después de guardar).</p>'));
   } catch (e) {
     abrirModal("histModal", '<h3>Historial</h3><p class="warn">No se pudo leer: ' + esc(e.message) + '</p>');

@@ -93,7 +93,7 @@ function sinaderDetalleProveedor(s) {
   const es = sinaderDeProveedor(s);
   if (!es.length) return "";
   return '<div class="meta" style="margin-top:10px;"><b>DF Autorizado SINADER</b> (' + es.length + ' establecimiento' + (es.length > 1 ? 's' : '') + ')</div>' +
-    es.map(e => '<div class="sin-det"><div class="meta"><b>' + esc(e.nombre || e.razon) + '</b> · ' + esc([e.comuna, e.region].filter(Boolean).join(", ")) + ' · RETC ' + esc(e.codigo) + '</div>' +
+    es.map(e => '<div class="sin-det"><div class="meta"><b>' + esc(nombreLindo(e.nombre || e.razon)) + '</b> · ' + esc([e.comuna, e.region].filter(Boolean).join(", ")) + ' · RETC ' + esc(e.codigo) + '</div>' +
       '<div class="chips">' + e.trat.map(t => tratChip(t)).join('') + '</div></div>').join('');
 }
 
@@ -156,7 +156,7 @@ let SIN_GRUPOS = [];
 
 function estabHtml({ e, trat }) {
   return '<div class="sin-det">' +
-    '<div class="meta"><b>' + esc(e.nombre || e.razon) + '</b> · <span class="chip loc">' + esc(e.comuna || "¿?") + '</span> ' +
+    '<div class="meta"><b>' + esc(nombreLindo(e.nombre || e.razon)) + '</b> · <span class="chip loc">' + esc(e.comuna || "¿?") + '</span> ' +
       '<span style="color:#475467">' + esc(e.region) + '</span> · RETC ' + esc(e.codigo) + '</div>' +
     '<div class="chips">' + trat.map(t => tratChip(t)).join('') + '</div>' +
   '</div>';
@@ -177,7 +177,7 @@ function renderSinader() {
     const n = g.estabs.length;
     return '<div class="card">' +
       '<div class="card-head" style="cursor:default">' +
-        '<div><p class="name">' + esc(g.razon) + '</p>' +
+        '<div><p class="name">' + esc(nombreLindo(g.razon)) + '</p>' +
           '<div class="badges">' + (g.en ? '<span class="badge b-sinader">En ecosistema</span> ' : '') +
             '<span class="badge b-sit">RUT ' + esc(g.rut || "sin RUT") + '</span> ' +
             '<span class="badge b-sit">' + n + (n < total ? ' de ' + total : '') + ' establecimiento' + (total > 1 ? 's' : '') + '</span></div></div>' +

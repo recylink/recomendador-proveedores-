@@ -49,7 +49,7 @@ function densidadRegistro(residuo) {
     Object.keys(DENS).filter(x => singular(x) === singular(k)).map(x => DENS[x])[0] || null;
 }
 /** Nombre que se muestra: el de la plataforma ("Carton" → "Cartón", "Plasticos" → "Mix Plástico"); si no tiene, el mismo. */
-const residuoNombre = residuo => residuoPlataforma(residuo) || String(residuo || "").trim();
+const residuoNombre = residuo => residuoPlataforma(residuo) || nombreLindo(residuo);
 /** Residuos sin repetir por su nombre de la plataforma ("Plásticos" y "Mix Plásticos" son uno solo). */
 function residuosUnicos(lista) {
   const vistos = new Set();

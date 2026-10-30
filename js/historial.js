@@ -164,7 +164,7 @@ function renderHistorialPrecios() {
       '<label>Unidad' + sel("hisUni", opc(cUni), HIS.unidad, "HIS.unidad=this.value;renderHistorialPrecios()") + '</label>' +
       (conTr ? '<label>Tratamiento' + sel("hisTrat", [{ v: "", txt: "Todos" }].concat(opc(cTrat)), HIS.trat, "HIS.trat=this.value;renderHistorialPrecios()") + '</label>' : '') +
       '<label>Región' + sel("hisReg", [{ v: "", txt: "Todas" }].concat(opc(cReg)), HIS.region, "HIS.region=this.value;renderHistorialPrecios()") + '</label>' +
-      '<label>Proveedor' + sel("hisProv", [{ v: "", txt: "Todos" }].concat(opc(cProv4)), HIS.prov, "HIS.prov=this.value;renderHistorialPrecios()") + '</label>' +
+      '<label>Proveedor' + sel("hisProv", [{ v: "", txt: "Todos" }].concat(opc(cProv4).map(o => ({ v: o.v, txt: nombreLindo(o.v) + " (" + cProv4[o.v] + ")" }))), HIS.prov, "HIS.prov=this.value;renderHistorialPrecios()") + '</label>' +
       '<div class="cmp-toggle" role="group" aria-label="Moneda del eje"><button type="button" class="' + (HIS.moneda === "UF" ? "on" : "") + '" onclick="HIS.moneda=\'UF\';renderHistorialPrecios()">UF</button><button type="button" class="' + (HIS.moneda === "CLP" ? "on" : "") + '" onclick="HIS.moneda=\'CLP\';renderHistorialPrecios()">Pesos</button></div>' +
     '</div>' +
     (HIS_PREVIOS_ERR ? '<p class="warn small">No se pudo leer el Historial (' + esc(HIS_PREVIOS_ERR) + '): faltan los valores anteriores de las tarifas editadas.</p>' : '') +
@@ -186,7 +186,7 @@ function leyendaHistorial(pts, colorDe) {
   const conColor = provs.filter(p => colorDe(p) !== HIS_OTROS), otros = provs.length - conColor.length;
   const formas = unicosOrdenados(pts.map(p => formaDe(p.fuente)));
   return '<div class="his-ley">' +
-    conColor.map(p => '<span><i class="his-sw" style="background:' + colorDe(p) + '"></i>' + esc(p) + '</span>').join('') +
+    conColor.map(p => '<span><i class="his-sw" style="background:' + colorDe(p) + '"></i>' + esc(nombreLindo(p)) + '</span>').join('') +
     (otros ? '<span><i class="his-sw" style="background:' + HIS_OTROS + '"></i>' + (conColor.length ? 'Otros ' : '') + otros + ' proveedor' + (otros > 1 ? 'es' : '') + '</span>' : '') +
     '<span class="his-sep"></span>' +
     HIS_FORMAS.filter(x => formas.includes(x.f)).map(x => '<span>' + formaSvg(x.f, "#475467", true, 6) + esc(x.txt) + '</span>').join('') +
@@ -263,9 +263,9 @@ function dibujarHistorial(pts, colorDe, u) {
   cont.querySelectorAll(".his-pt").forEach(el => {
     el.addEventListener("mouseenter", () => {
       const g = HIS_GRUPOS[+el.dataset.i], p = g.pts[0];
-      tip.innerHTML = '<div class="his-tip-cab"><i class="his-sw" style="background:' + g.color + '"></i><b>' + esc(p.prov) + '</b></div>' +
+      tip.innerHTML = '<div class="his-tip-cab"><i class="his-sw" style="background:' + g.color + '"></i><b>' + esc(nombreLindo(p.prov)) + '</b></div>' +
         '<div class="his-tip-val">' + fmtHis(p.v) + esc(u) + '</div>' +
-        '<div class="muted">' + esc(p.fecha) + ' · ' + esc(p.fuente || "sin fuente") + ' · ' + esc(ESTADO_TXT[p.estado]) + '</div>' +
+        '<div class="muted">' + esc(fmtFecha(p.fecha)) + ' · ' + esc(p.fuente || "sin fuente") + ' · ' + esc(ESTADO_TXT[p.estado]) + '</div>' +
         (g.pts.length > 1 ? '<div class="muted">' + g.pts.length + ' precios iguales: ' + esc(unicosOrdenados(g.pts.map(x => x.empresa || "Valor general")).join(", ")) + '</div>'
           : '<div class="muted">' + esc([p.empresa || "Valor general", p.sucursal, p.region].filter(Boolean).join(" · ")) + '</div>');
       tip.style.display = "";
@@ -281,8 +281,8 @@ function tablaHistorial(pts, colorDe, u) {
   const MAX = 200;
   const orig = p => (p.moneda === "UF" ? fmtNum(p.precio, 2) + " UF" : fmtCLP(p.precio)) + " / " + p.unidad;
   return '<div class="tscroll"><table class="ttar"><tr><th>Fecha</th><th>Proveedor</th><th>Empresa · sucursal</th><th>Región</th><th class="num">' + (HIS.moneda === "UF" ? "UF" : "Pesos") + esc(u) + '</th><th class="num">Precio original</th><th>Fuente · motivo</th><th>Estado</th></tr>' +
-    pts.slice(0, MAX).map(p => '<tr' + (p.estado === "vigente" ? '' : ' class="his-ant"') + '><td class="small his-fecha">' + esc(p.fecha) + '</td>' +
-      '<td><i class="his-sw" style="background:' + colorDe(p.prov) + '"></i><b>' + esc(p.prov) + '</b></td>' +
+    pts.slice(0, MAX).map(p => '<tr' + (p.estado === "vigente" ? '' : ' class="his-ant"') + '><td class="small his-fecha">' + esc(fmtFecha(p.fecha)) + '</td>' +
+      '<td><i class="his-sw" style="background:' + colorDe(p.prov) + '"></i><b>' + esc(nombreLindo(p.prov)) + '</b></td>' +
       '<td class="small">' + esc([p.empresa || "Valor general", p.sucursal].filter(Boolean).join(" · ")) + '</td><td class="small">' + esc(p.region) + '</td>' +
       '<td class="num"><b>' + fmtHis(p.v) + '</b></td><td class="num small">' + esc(orig(p)) + '</td>' +
       '<td class="small">' + esc([p.fuente || "sin fuente", (p.motivo || "").toLowerCase()].filter(Boolean).join(" · ")) + '</td>' +
