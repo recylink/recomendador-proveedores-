@@ -29,8 +29,8 @@ function numDe(v) {
   if (v == null || v === "") return null;
   if (typeof v === "number") return v;
   const s = String(v).trim();
-  // "192.000" / "1.234,5" (es-CL) o "192000" / "3.5"
-  const n = /,/.test(s) || /\.\d{3}(\D|$)/.test(s) ? Number(s.replace(/\./g, "").replace(",", ".")) : Number(s);
+  // "192.000" / "1.234,5" (es-CL) o "192000" / "3.5" / "0.019" (el punto es de miles solo con forma 1.500, 192.000)
+  const n = /,/.test(s) || /^-?[1-9]\d{0,2}(\.\d{3})+$/.test(s) ? Number(s.replace(/\./g, "").replace(",", ".")) : Number(s);
   return isFinite(n) ? n : null;
 }
 const siNo = v => { const s = String(v || "").toLowerCase(); return s === "si" || s === "sí" ? "si" : s === "no" ? "no" : ""; };
