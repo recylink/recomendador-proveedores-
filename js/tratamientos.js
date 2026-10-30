@@ -48,10 +48,17 @@ function densidadRegistro(residuo) {
   return DENS[norm(EQUIVS[k] || "")] || DENS[k] || DENS[norm(residuoPlataforma(residuo))] ||
     Object.keys(DENS).filter(x => singular(x) === singular(k)).map(x => DENS[x])[0] || null;
 }
-/** Nombre del residuo sobre su color de la plataforma (sin color: solo el nombre).
+/** Nombre que se muestra: el de la plataforma ("Carton" → "Cartón", "Plasticos" → "Mix Plástico"); si no tiene, el mismo. */
+const residuoNombre = residuo => residuoPlataforma(residuo) || String(residuo || "").trim();
+/** Residuos sin repetir por su nombre de la plataforma ("Plásticos" y "Mix Plásticos" son uno solo). */
+function residuosUnicos(lista) {
+  const vistos = new Set();
+  return (lista || []).filter(r => { const k = norm(residuoNombre(r)); return k && !vistos.has(k) && vistos.add(k); });
+}
+/** Nombre del residuo (el de la plataforma) sobre su color (sin color: solo el nombre).
  *  cls: clase extra (p. ej. "chip"). Letra blanca; en los colores muy claros (amarillos, grises claros), letra oscura. */
 function resTag(residuo, cls) {
-  const txt = esc(residuo || "-");
+  const txt = esc(residuo ? residuoNombre(residuo) : "-");
   const c = (densidadRegistro(residuo) || {}).color || "";
   if (!/^#[0-9a-f]{6}$/i.test(c)) return cls ? '<span class="' + cls + '">' + txt + '</span>' : txt;
   const n = parseInt(c.slice(1), 16), lum = (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255;

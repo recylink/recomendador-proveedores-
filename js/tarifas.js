@@ -75,6 +75,20 @@ function empresaCanonica(nombre) {
   const existentes = unicosOrdenados(TARIFAS.map(t => t.cliente));
   return existentes.find(e => claveNombre(e) === k) || String(nombre).trim();
 }
+/** Ícono de papelera (hereda el color del botón). */
+const ICO_PAPELERA = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>';
+/** Cómo se muestra una empresa: la forma más usada en las tarifas ("Euro constructora" → "Euro Constructora"). */
+let _EMP_VIS = null;
+function empresaVisible(nombre) {
+  const k = claveNombre(nombre); if (!k) return String(nombre || "").trim();
+  if (!_EMP_VIS || _EMP_VIS.n !== TARIFAS) { // se rehace cuando cambia la lista de tarifas
+    const cuenta = {};
+    TARIFAS.forEach(t => { const c = claveNombre(t.cliente); if (c) (cuenta[c] = cuenta[c] || {})[t.cliente] = (cuenta[c][t.cliente] || 0) + 1; });
+    _EMP_VIS = { n: TARIFAS, mapa: {} };
+    Object.keys(cuenta).forEach(c => { const o = cuenta[c]; _EMP_VIS.mapa[c] = Object.keys(o).sort((a, b) => o[b] - o[a])[0]; });
+  }
+  return _EMP_VIS.mapa[k] || String(nombre).trim();
+}
 
 /* ---------------- sesión ---------------- */
 let AUTH = lsGet("rp_auth");
@@ -570,8 +584,9 @@ function filaTarifaHtml(t, opts) {
     '<td class="acc">' +
       '<button class="lnk" onclick="abrirFormTarifa(\'' + esc(t.id) + '\')">Editar</button>' +
       '<button class="lnk" onclick="verHistorial(\'' + esc(t.id) + '\')">Historial</button>' +
-      '<button class="lnk danger" onclick="eliminarTarifa(\'' + esc(t.id) + '\')">Eliminar</button>' +
       '<div class="muted small">' + esc((t.actualizado_el || "").slice(0, 10)) + ' · ' + esc((t.actualizado_por || "").replace(/@.*/, "")) + '</div>' +
+      // separado de Editar para no apretarlo por error; pide confirmación con el detalle de la tarifa
+      '<button class="lnk danger acc-eliminar" onclick="eliminarTarifa(\'' + esc(t.id) + '\')">' + ICO_PAPELERA + ' Eliminar</button>' +
     '</td></tr>';
 }
 
@@ -964,7 +979,7 @@ function residuosFilaHtml(t0, ts) {
   const sup = proveedorDeTarifa(t0);
   const cu = (sup && sup.residuosCU) || [];
   const nota = sup && !sup.sheetOnly ? "según sus tarifas (sin residuos cargados en ClickUp)" : "según sus tarifas (sin ficha en ClickUp)";
-  const lista = cu.length ? unicosOrdenados(cu) : unicosOrdenados(ts.map(t => t.residuo)).filter(r => !/^sin especificar$/i.test(r));
+  const lista = residuosUnicos(cu.length ? unicosOrdenados(cu) : unicosOrdenados(ts.map(t => t.residuo)).filter(r => !/^sin especificar$/i.test(r)));
   if (!lista.length) return '<span class="muted">-</span>';
   const max = 6;
   return '<div class="res-fila">' + lista.slice(0, max).map(r => resTag(r, "chip")).join('') +
@@ -979,9 +994,9 @@ function filaProveedorHtml(ts) {
   // Referencial corta: primero los costos por m³ (por región), después lo que va por unidad
   const conPrecio = referencialRegiones(ts).filter(f => f.valor != null).sort((a, b) => (a.tipo === "m3" ? 0 : 1) - (b.tipo === "m3" ? 0 : 1));
   const refCorta = conPrecio.length
-    ? conPrecio.slice(0, 3).map(f => '<div class="small ref-linea">' + resTag(f.residuo) + (f.region ? ' <span class="muted">' + esc(f.region) + '</span>' : '') + ' <b class="' + (f.paga ? "t-paga" : "") + '">' + fmtCLP(f.valor) + '</b> <span class="muted">/ ' + esc(f.tipo === "m3" ? "m³" : f.unidad || "") + '</span></div>').join('') + (conPrecio.length > 3 ? '<div class="muted small">+' + (conPrecio.length - 3) + ' más</div>' : '')
+    ? conPrecio.slice(0, 3).map(f => '<div class="small ref-linea">' + resTag(f.residuo) + (f.region ? ' <span class="muted">' + esc(f.region) + '</span>' : '') + ' <b class="' + (f.paga ? "t-paga" : "") + '">' + fmtCLP(f.valor) + '</b> <span class="muted">/ ' + esc(f.tipo === "m3" ? "m³" : f.unidad || "") + '</span>' + (f.fuera ? ' <span class="t-alerta" title="' + esc(f.fuera.txt) + ': puede ser un error de carga">⚠</span>' : '') + '</div>').join('') + (conPrecio.length > 3 ? '<div class="muted small">+' + (conPrecio.length - 3) + ' más</div>' : '')
     : '<span class="muted">sin precio</span>';
-  const empresas = unicosOrdenados(ts.filter(t => !esGeneral(t)).map(t => t.cliente));
+  const empresas = unicosOrdenados(ts.filter(t => !esGeneral(t)).map(t => empresaVisible(t.cliente)));
   const actualizado = ts.map(t => String(t.actualizado_el || t.fecha || "").slice(0, 10)).sort().pop();
   const principal =
     '<tr class="t-fila" onclick="verDetalle(\'' + gid + '\', this)">' +
@@ -1143,8 +1158,8 @@ function botonReferencial(f) {
   const btnEditar = '<button class="ico-btn" title="Editar tarifa referencial" aria-label="Editar tarifa referencial" onclick="event.stopPropagation();' + editar + '">✎</button>';
   // − eliminar: solo un valor fijado a mano; el promedio sale de las tarifas de clientes
   const btnEliminar = f.genId
-    ? '<button class="ico-btn danger" title="Eliminar tarifa referencial" aria-label="Eliminar tarifa referencial" onclick="event.stopPropagation();eliminarReferencial(\'' + esc(f.genId) + '\')">−</button>'
-    : '<button class="ico-btn" disabled title="' + (f.sinTarifas ? 'No hay tarifa que eliminar' : 'Es el promedio de las tarifas de clientes: para quitarlo, da de baja esas tarifas en el detalle') + '" aria-label="Eliminar (no disponible)">−</button>';
+    ? '<button class="ico-btn danger" title="Eliminar tarifa referencial" aria-label="Eliminar tarifa referencial" onclick="event.stopPropagation();eliminarReferencial(\'' + esc(f.genId) + '\')">' + ICO_PAPELERA + '</button>'
+    : '<button class="ico-btn" disabled title="' + (f.sinTarifas ? 'No hay tarifa que eliminar' : 'Es el promedio de las tarifas de clientes: para quitarlo, da de baja esas tarifas en el detalle') + '" aria-label="Eliminar (no disponible)">' + ICO_PAPELERA + '</button>';
   return btnEditar + btnEliminar;
 }
 /** Elimina un valor de referencia fijado a mano (la referencial vuelve a ser la mediana; su copia queda en el Historial de cambios). */

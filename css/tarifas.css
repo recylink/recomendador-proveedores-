@@ -222,6 +222,8 @@ tr.abierta .t-flecha { transform:rotate(90deg); }
 .ref-chips { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:6px; }
 .pill.conf-alta { background:#DCFAE6; color:#067647; }
 .pill.conf-media { background:#FEF0C7; color:#93370D; }
+.pill.p-fuera { background:#FEE4E2; color:#B42318; }
+.acc-eliminar { display:block; margin-top:10px; padding-top:6px !important; border-top:1px dashed #E4E7EC; }
 .pill.conf-baja { background:#FEE4E2; color:#912018; }
 .desg-fila td { background:#fff; }
 .desg-box { border:1px solid #D0E4F2; border-radius:10px; padding:10px 12px; margin:6px 0; }
@@ -298,3 +300,12 @@ tr.his-ant td { color:#667085; }
 .nt-dm-l { font-size:12px; font-weight:400; }
 .nt-trat .chk, .tf-campo .chk { display:flex; flex-direction:row; align-items:center; gap:6px; }
 .nt-trat input[type=checkbox], .tf-campo .chk input[type=checkbox] { width:16px; height:16px; min-height:0; padding:0; margin:0; flex:none; }
+
+/* Proveedores: tarjeta compacta (la ficha completa se abre con "Ver ficha completa") */
+.card-compacta .chips { margin:10px 0 4px; }
+.precios-comp { display:flex; flex-wrap:wrap; gap:6px 16px; align-items:center; margin:6px 0 2px; }
+.precios-comp .ref-linea { margin-bottom:0; }
+.ver-ficha { margin-top:8px; padding-left:0 !important; font-size:13px; }
+.card-full { margin-top:10px; padding-top:12px; border-top:1px solid #EAECF0; }
+.mas-prov { text-align:center; margin:16px 0 28px; }
+.score[title] { cursor:help; }

@@ -166,16 +166,21 @@ function mercado() {
     m3[k] = { op: mediana(provs.map(l => mediana(l.map(i => i.op)))), n: provs.length,
       conArr: mediana(provs.map(l => mediana(l.map(i => i.conArr).filter(v => v != null))).filter(v => v != null)) };
   });
+  // m³ por residuo × región sin separar contenedor: solo para detectar precios fuera de rango (errores de carga)
+  const m3rr = {}, porRR = {};
+  items.forEach(it => { const k = claveM3RR(it); ((porRR[k] = porRR[k] || {})[it.provKey] = porRR[k][it.provKey] || []).push(it.op); });
+  Object.keys(porRR).forEach(k => { const provs = Object.values(porRR[k]); m3rr[k] = { op: mediana(provs.map(mediana)), n: provs.length }; });
   // por unidad: residuo × servicio × unidad × cobra/paga × región
   const pu = {};
   TARIFAS.filter(t => t.activo && t.vigente && t.precio_num != null && clpDe(t) != null && clpDe(t) >= 0).forEach(t => {
     const k = claveUnidad(t); ((pu[k] = pu[k] || {})[t.provKey] = pu[k][t.provKey] || []).push(clpDe(t));
   });
   Object.keys(pu).forEach(k => { const provs = Object.values(pu[k]); unid[k] = { v: mediana(provs.map(l => mediana(l))), n: provs.length }; });
-  return (_MERCADO = { n: TARIFAS.length, m3, unid });
+  return (_MERCADO = { n: TARIFAS.length, m3, m3rr, unid });
 }
 /** Costo por m³: residuo × región × contenedor (tipo y volumen), porque el tamaño cambia el costo por m³. */
 const claveM3 = i => [norm(i.residuo), i.region, norm(i.cont), i.vol || ""].join("|");
+const claveM3RR = i => [norm(residuoNombre(i.residuo)), i.region].join("|");
 const claveUnidad = t => [norm(t.residuo), t.tipo_servicio, norm(t.unidad), t.tipo, t.region || ""].join("|");
 
 /** Filas de la referencial por región de un proveedor. */
@@ -195,6 +200,7 @@ function referencialRegiones(ts) {
       valor: mediana(l.map(i => i.op)), conArr: mediana(l.map(i => i.conArr).filter(v => v != null)),
       mercado: mk && mk.n > 0 ? mk : null, porQue: porQueTexto(ts2, l.length, i0.region, "sucursal"),
       conf: confianzaDe(ts2), items: l, tarifas: ts2, dens: i0.dens });
+    filas[filas.length - 1].fuera = fueraDeMercado(filas[filas.length - 1].valor, mercado().m3rr[claveM3RR(i0)]);
   });
   // 2) por unidad: lo que no entró al costo por m³ (fijadas, compra de material, sin volumen…)
   const pu = {};
@@ -212,6 +218,7 @@ function referencialRegiones(ts) {
         (tget(genT, "motivo_precio") ? " · motivo: " + genT.motivo_precio.toLowerCase() : "") + (tget(genT, "detalle") ? " · " + String(genT.detalle).replace(/\s+/g, " ").slice(0, 120) : "")
         : vals.length ? porQueTexto(base, vals.length, t0.region, "tarifa") : "Sin precio",
       conf: confianzaDe(base), tarifas: base });
+    filas[filas.length - 1].fuera = fueraDeMercado(valor, mk && mk.n > 0 ? mk : null);
   });
   const orden = f => [f.residuo, f.tipo === "m3" ? "0" : "1", f.region].join("|");
   return filas.sort((a, b) => orden(a).localeCompare(orden(b), "es"));
@@ -219,6 +226,15 @@ function referencialRegiones(ts) {
 
 /* ---------------- HTML ---------------- */
 const pillConf = c => '<span class="pill conf-' + c.nivel + '">' + esc(c.txt) + '</span>';
+/** Precio que parece error de carga: más de 10 veces sobre o bajo la mediana del mercado (con 3 proveedores o más). */
+function fueraDeMercado(valor, m) {
+  const ref = m && (m.op != null ? m.op : m.v);
+  if (valor == null || !ref || !m.n || m.n < 3 || valor <= 0) return null;
+  const x = valor / ref;
+  return x > 10 ? { veces: x, txt: "Revisar: " + fmtNum(Math.round(x), 0) + " veces el mercado" }
+    : x < 0.1 ? { veces: x, txt: "Revisar: " + fmtNum(Math.round(1 / x), 0) + " veces bajo el mercado" } : null;
+}
+const pillFuera = f => f ? '<span class="pill p-fuera" title="Puede ser un error de carga (unidad, ceros o moneda). Revisa la tarifa.">⚠ ' + esc(f.txt) + '</span>' : '';
 function vsMercadoHtml(valor, m, paga) {
   if (valor == null || !m || m.v == null && m.op == null) return '<span class="muted small">sin comparables</span>';
   const ref = m.op != null ? m.op : m.v;
@@ -260,6 +276,7 @@ function referencialRegionHtml(ts, opts) {
   const sinTar = (opts.residuosCU || []).filter(r => r && !vistos.has(norm(r)) && (vistos.add(norm(r)), true));
   const n = ts.filter(t => t.vigente && t.alertas && t.alertas.length).length;
   const cab = '<span class="t-etq">' + esc(opts.titulo || "Tarifa referencial por región") + (n ? ' ' + alertaBadge(ts.filter(t => t.vigente), n) : '') + '</span>';
+  if (!filas.length && !sinTar.length && opts.soloConPrecio) return ''; // en la tarjeta de Proveedores no se muestra un bloque vacío
   if (!filas.length && !sinTar.length) return '<div class="ref-box">' + cab + (opts.proveedor && !opts.soloConPrecio ? '<div class="sec-acc">' + botonNuevaReferencial(opts.proveedor) + '</div>' : '<div class="muted small">Sin tarifas.</div>') + '</div>';
   const uf = UF.valor ? " · UF del día " + fmtCLP(UF.valor) : "";
   const fila = f => {
@@ -276,7 +293,7 @@ function referencialRegionHtml(ts, opts) {
     const acc = f.tipo === "unidad" ? botonReferencial({ proveedor: f.t0.proveedor_nombre, residuo: f.residuo, unidad: f.unidad, tipo: f.t0.tipo, genId: f.genId, ref: f.valor, refUF: null, sinTarifas: false }) : '';
     return '<tr' + (f.tipo === "m3" ? ' class="ref-m3"' : '') + '><td>' + resTxt + '</td><td>' + esc(f.region || "Todas") + '</td><td class="small">' + esc(f.contenedor || "—") + '</td>' +
       '<td class="num">' + precio + '</td><td class="num">' + vsMercadoHtml(f.valor, f.mercado, f.paga) + '</td>' +
-      '<td class="small">' + esc(f.porQue) + '<div class="ref-chips">' + pillConf(f.conf) +
+      '<td class="small">' + esc(f.porQue) + '<div class="ref-chips">' + pillFuera(f.fuera) + pillConf(f.conf) +
         (f.tipo === "m3" ? '<button type="button" class="lnk small" data-txt="Ver desglose (' + f.items.length + ')" onclick="event.stopPropagation();verDesglose(\'' + id + '\',this)">Ver desglose (' + f.items.length + ')</button>' : '') + '</div></td>' +
       '<td><span class="ref-acc">' + acc + '</span></td></tr>' + desg;
   };

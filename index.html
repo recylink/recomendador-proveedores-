@@ -114,10 +114,10 @@ a { color:var(--blue); }
   .print-header img { height:34px; width:auto; }
 }
 </style>
-<link rel="stylesheet" href="css/tarifas.css?v=3.79">
+<link rel="stylesheet" href="css/tarifas.css?v=3.80">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="css/recylink.css?v=3.79">
+<link rel="stylesheet" href="css/recylink.css?v=3.80">
 </head>
 <body>
 <div class="wrap">
@@ -234,16 +234,16 @@ a { color:var(--blue); }
 </div>
 
 <!-- ?v=: subir el número al publicar cambios en estos archivos, para que el navegador no use la copia vieja -->
-<script src="js/comunas.js?v=3.79"></script>
-<script src="js/esquema.js?v=3.79"></script>
-<script src="js/tratamientos.js?v=3.79"></script>
-<script src="js/tarifas.js?v=3.79"></script>
-<script src="js/referenciales.js?v=3.79"></script>
-<script src="js/historial.js?v=3.79"></script>
-<script src="js/sinader.js?v=3.79"></script>
-<script src="js/nueva-tarifa.js?v=3.79"></script>
-<script src="js/editar-tarifas.js?v=3.79"></script>
-<script src="js/importar.js?v=3.79"></script>
+<script src="js/comunas.js?v=3.80"></script>
+<script src="js/esquema.js?v=3.80"></script>
+<script src="js/tratamientos.js?v=3.80"></script>
+<script src="js/tarifas.js?v=3.80"></script>
+<script src="js/referenciales.js?v=3.80"></script>
+<script src="js/historial.js?v=3.80"></script>
+<script src="js/sinader.js?v=3.80"></script>
+<script src="js/nueva-tarifa.js?v=3.80"></script>
+<script src="js/editar-tarifas.js?v=3.80"></script>
+<script src="js/importar.js?v=3.80"></script>
 <script>
 /* ============================================================
    FUENTES DE DATOS (lectura via gviz)
@@ -673,50 +673,89 @@ function render(){
   });
   rows.sort((a,b)=> b.score - a.score || a.name.localeCompare(b.name));
 
-  document.getElementById("count").textContent = rows.length + " proveedor(es) - ordenados por recomendacion";
-  if(!rows.length){ list.innerHTML = '<div class="empty">Sin resultados para el filtro actual.</div>'; return; }
+  document.getElementById("count").textContent = rows.length + " proveedores \u00b7 ordenados por score";
+  if(!rows.length){ list.innerHTML = '<div class="empty">No hay proveedores con estos filtros. Prueba quitando el residuo, la ubicaci\u00f3n o alg\u00fan estado.</div>'; return; }
 
-  list.innerHTML = rows.map((s, idx)=>{
+  // de a PROV_PAGINA tarjetas compactas; la ficha completa se arma al abrir la tarjeta
+  if(!render._mas) PROV_LIMITE = PROV_PAGINA;
+  render._mas = false;
+  const quedan = rows.length - PROV_LIMITE;
+  list.innerHTML = rows.slice(0, PROV_LIMITE).map((s, idx)=>{
     const bk = estadoBucket(s.estado);
     const badgeCls = bk==="otros" ? "b-sit" : "b-"+s.estado.replace(/\s+/g,"");
     const n = Math.max(0, Math.min(5, Math.round(s.estrellas||0)));
-    const stars = '<span class="stars" title="'+n+' de 5">'+'\u2605'.repeat(n)+'\u2606'.repeat(5-n)+'</span>';
-    const resChips = s.residuos.map(r=>resTag(r,'chip')).join('') || (s.residuoTxt?'<span class="chip">'+esc(s.residuoTxt)+'</span>':'');
-    const areaChips = s.areas.length ? s.areas.map(a=>'<span class="chip loc">'+esc(a)+'</span>').join('') : '';
-    const ubicExtra = [s.ubicTxt, s.direccion].filter(Boolean).join(' - ');
-    const areaLine = (s.areas.length || ubicExtra)
-      ? '<div class="meta"><b>Area de accion:</b> '+(areaChips||'')+(ubicExtra?' <span style="color:#475467">'+esc(ubicExtra)+'</span>':'')+'</div>'
-      : (s.sheetOnly ? '' : '<div class="meta"><b>Area de accion:</b> <span class="toggle-hint">no especificada</span></div>');
-    const cli = s.clientes.length
-      ? '<div class="clientes"><b>Clientes (tarifas):</b><br>'+s.clientes.map(c=>'<span class="ci">'+esc(c[0])+(c[1]?' - '+esc(c[1]):'')+'</span>').join('')+'</div>'
-      : '';
-    const meta = [];
-    if(s.situacion) meta.push('<span class="badge b-sit">'+esc(s.situacion)+'</span>');
-    if(s.movimiento) meta.push('<span class="badge b-sit">Mov: '+esc(s.movimiento)+'</span>');
-    if(s.puntaje!=null) meta.push('<span class="badge b-sit">Puntaje: '+s.puntaje+'</span>');
+    const stars = '<span class="stars" title="Calificaci\u00f3n del equipo: '+n+' de 5">'+'\u2605'.repeat(n)+'\u2606'.repeat(5-n)+'</span>';
+    const residuos = residuosUnicos(s.residuos);
+    const resChips = residuos.slice(0, 6).map(r=>resTag(r,'chip')).join('') + (residuos.length>6 ? '<span class="muted small">+'+(residuos.length-6)+' m\u00e1s</span>' : '') ||
+      (s.residuoTxt?'<span class="chip">'+esc(s.residuoTxt)+'</span>':'');
     const sinB = sinaderBadgeProveedor(s);
-    const contactLine = contactoHtml(s);
-    const servLine = '';
     return ''+
-    '<div class="card '+(s.estado==="vetados"?"vetado":"")+(s.estado==="planilla"?"planilla":"")+'">'+
+    '<div class="card card-compacta '+(s.estado==="vetados"?"vetado":"")+(s.estado==="planilla"?"planilla":"")+'">'+
       '<div class="card-head" onclick="toggle(\''+s.id+'\')">'+
         '<div>'+
           '<div class="rank">#'+(idx+1)+'</div>'+
           '<p class="name">'+esc(s.name)+'</p>'+
-          '<div class="badges"><span class="badge '+badgeCls+'">'+esc(s.estado==="planilla"?"sin ClickUp":s.estado)+'</span> '+sinB+' '+stars+'</div>'+
+          '<div class="badges"><span class="badge '+badgeCls+'">'+esc(s.estado==="planilla"?"sin ClickUp":ESTADO_PROV_TXT[s.estado]||s.estado)+'</span> '+sinB+' '+stars+'</div>'+
         '</div>'+
-        '<div class="score"><div class="num">'+s.score+'</div><div class="lbl">score</div></div>'+
+        '<div class="score" title="'+esc(scoreExplicado(s))+'"><div class="num">'+s.score+'</div><div class="lbl">score \u24d8</div></div>'+
       '</div>'+
-      contactLine +
-      (resChips?'<div class="meta" style="margin-top:8px"><b>Residuos que gestiona:</b></div><div class="chips">'+resChips+'</div>':'')+
-      tarifasResumenProveedor(s) +
-      servLine +
-      areaLine +
-      (meta.length?'<div class="badges">'+meta.join(' ')+'</div>':'')+
-      cli +
-      '<div class="detail" id="d-'+s.id+'"><span class="toggle-hint">Ver detalle...</span></div>'+
+      (resChips?'<div class="chips">'+resChips+'</div>':'')+
+      preciosCompactos(s) +
+      '<button type="button" class="lnk ver-ficha" id="vf-'+s.id+'" onclick="toggle(\''+s.id+'\')">Ver ficha completa \u25be</button>'+
+      '<div class="card-full" id="f-'+s.id+'" style="display:none"></div>'+
     '</div>';
-  }).join('');
+  }).join('') +
+  (quedan > 0 ? '<div class="mas-prov"><button type="button" class="cbtn sec" onclick="verMasProveedores()">Mostrar '+Math.min(PROV_PAGINA, quedan)+' m\u00e1s</button> <span class="muted small">quedan '+quedan+'</span></div>' : '');
+}
+
+const PROV_PAGINA = 30;
+let PROV_LIMITE = PROV_PAGINA;
+function verMasProveedores(){ PROV_LIMITE += PROV_PAGINA; render._mas = true; render(); }
+
+// "bd" es la etapa de evaluaci\u00f3n en ClickUp
+const ESTADO_PROV_TXT = { aprobados:"Aprobado", bd:"Por evaluar", "no aprobados":"No aprobado", vetados:"Vetado" };
+const SIT_TXT = { Cumple:"Cumple", Especiales:"Especiales", Atencion:"Atenci\u00f3n", Critico:"Cr\u00edtico" };
+
+/** C\u00f3mo se llega al score: estado + estrellas + situaci\u00f3n (recalcScore). */
+function scoreExplicado(s){
+  const base = STATUS_BASE[s.estado] != null ? STATUS_BASE[s.estado] : 40;
+  const est = Math.round((s.estrellas||0) * 6), sit = SIT_BONUS[s.situacion] || 0;
+  return 'Score '+s.score+' = estado '+(ESTADO_PROV_TXT[s.estado]||s.estado||'-')+' ('+base+') + calificaci\u00f3n '+(Math.round(s.estrellas||0))+'\u2605 \u00d7 6 ('+est+')'+
+    ' + situaci\u00f3n '+(SIT_TXT[s.situacion]||s.situacion||'sin dato')+' ('+sit+').\nM\u00e1ximo 115: Aprobado (70) + 5\u2605 (30) + Cumple (15).';
+}
+
+/** Hasta 2 precios de la referencial en la tarjeta compacta. */
+function preciosCompactos(s){
+  const fs = referencialRegiones(tarifasDeProveedor(s)).filter(f=>f.valor!=null).sort((a,b)=>(a.tipo==="m3"?0:1)-(b.tipo==="m3"?0:1));
+  if(!fs.length) return '';
+  return '<div class="precios-comp">'+fs.slice(0,2).map(f=>'<span class="small ref-linea">'+resTag(f.residuo)+(f.region?' <span class="muted">'+esc(f.region)+'</span>':'')+
+    ' <b class="'+(f.paga?'t-paga':'')+'">'+fmtCLP(f.valor)+'</b> <span class="muted">/ '+esc(f.tipo==="m3"?"m\u00b3":f.unidad||"")+'</span>'+(f.fuera?' <span class="t-alerta" title="'+esc(f.fuera.txt)+'">\u26a0</span>':'')+'</span>').join('')+
+    (fs.length>2?'<span class="muted small">+'+(fs.length-2)+' precios m\u00e1s</span>':'')+'</div>';
+}
+
+/** Lo que antes estaba siempre a la vista: contacto, todos los residuos, referencial, \u00e1rea, situaci\u00f3n y clientes. */
+function cardFullHtml(s){
+  const residuos = residuosUnicos(s.residuos);
+  const resChips = residuos.map(r=>resTag(r,'chip')).join('');
+  const areaChips = s.areas.length ? s.areas.map(a=>'<span class="chip loc">'+esc(a)+'</span>').join('') : '';
+  const ubicExtra = [s.ubicTxt, s.direccion].filter(Boolean).join(' - ');
+  const areaLine = (s.areas.length || ubicExtra)
+    ? '<div class="meta"><b>\u00c1rea de acci\u00f3n:</b> '+(areaChips||'')+(ubicExtra?' <span style="color:#475467">'+esc(ubicExtra)+'</span>':'')+'</div>'
+    : (s.sheetOnly ? '' : '<div class="meta"><b>\u00c1rea de acci\u00f3n:</b> <span class="toggle-hint">no especificada</span></div>');
+  const cli = s.clientes.length
+    ? '<div class="clientes"><b>Clientes (tarifas):</b><br>'+s.clientes.map(c=>'<span class="ci">'+esc(empresaVisible(c[0]))+(c[1]?' - '+esc(c[1]):'')+'</span>').join('')+'</div>'
+    : '';
+  const meta = [];
+  if(s.situacion) meta.push('<span class="badge b-sit" title="Situaci\u00f3n en ClickUp">Situaci\u00f3n: '+esc(SIT_TXT[s.situacion]||s.situacion)+'</span>');
+  if(s.movimiento) meta.push('<span class="badge b-sit" title="Nivel de movimiento en ClickUp">Movimiento '+esc(String(s.movimiento).toLowerCase())+'</span>');
+  if(s.puntaje!=null) meta.push('<span class="badge b-sit" title="Campo Puntaje de ClickUp">Puntaje ClickUp: '+s.puntaje+'</span>');
+  return contactoHtml(s) +
+    (resChips?'<div class="meta" style="margin-top:8px"><b>Residuos que gestiona:</b></div><div class="chips">'+resChips+'</div>':'')+
+    tarifasResumenProveedor(s) +
+    areaLine +
+    (meta.length?'<div class="badges">'+meta.join(' ')+'</div>':'')+
+    cli +
+    '<div class="detail" id="d-'+s.id+'"></div>';
 }
 
 /** Bloque de contacto de la tarjeta: persona, correo, teléfono, web, RUT y acceso a la tarjeta de ClickUp. */
@@ -738,12 +777,17 @@ function contactoHtml(s){
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
 
 function toggle(id){
-  const el = document.getElementById("d-"+id);
-  if(!el) return;
-  const open = el.classList.toggle("open");
-  if(!open) return;
   const s = SUPPLIERS.find(x=>x.id===id);
-  if(!s) return;
+  const full = document.getElementById("f-"+id), btn = document.getElementById("vf-"+id);
+  if(!s || !full) return;
+  const abrir = full.style.display === "none";
+  full.style.display = abrir ? "" : "none";
+  if(btn) btn.textContent = abrir ? "Ocultar ficha ▴" : "Ver ficha completa ▾";
+  if(!abrir || full.dataset.lista) return;
+  full.dataset.lista = "1"; // la ficha y sus comentarios se cargan una sola vez
+  full.innerHTML = cardFullHtml(s);
+  const el = document.getElementById("d-"+id);
+  el.classList.add("open");
   const extra = [];
   if(s.direccion) extra.push('<div class="meta"><b>Direccion:</b> '+esc(s.direccion)+'</div>');
   if(s.cobertura) extra.push('<div class="meta"><b>Cobertura:</b> '+esc(s.cobertura)+'</div>');
