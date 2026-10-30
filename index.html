@@ -114,10 +114,10 @@ a { color:var(--blue); }
   .print-header img { height:34px; width:auto; }
 }
 </style>
-<link rel="stylesheet" href="css/tarifas.css?v=3.80">
+<link rel="stylesheet" href="css/tarifas.css?v=3.81">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="css/recylink.css?v=3.80">
+<link rel="stylesheet" href="css/recylink.css?v=3.81">
 </head>
 <body>
 <div class="wrap">
@@ -126,7 +126,7 @@ a { color:var(--blue); }
     <div id="authBox"></div>
   </header>
 
-  <div class="tabs"><button data-v="prov" class="on" onclick="mostrarVista('prov')">Proveedores</button><button data-v="tar" onclick="mostrarVista('tar')">Tarifas</button><button data-v="sin" onclick="mostrarVista('sin')">DF SINADER</button></div>
+  <div class="tabs"><button data-v="prov" class="on" onclick="mostrarVista('prov')">Proveedores</button><button data-v="tar" onclick="mostrarVista('tar')">Tarifas</button><button data-v="sin" onclick="mostrarVista('sin')">Gestores SINADER</button></div>
 
   <div id="viewProv">
   <div class="controls">
@@ -135,7 +135,7 @@ a { color:var(--blue); }
       <select id="fResiduo"><option value="">Todos</option><option value="Aceite de Cocina">Aceite de Cocina</option><option value="Aceite Lubricante">Aceite Lubricante</option><option value="Acero Inoxidable">Acero Inoxidable</option><option value="Agua con HC">Agua con HC</option><option value="Aguas contaminadas con HC">Aguas contaminadas con HC</option><option value="Aguas Grises">Aguas Grises</option><option value="Aguas Servidas">Aguas Servidas</option><option value="Alucom">Alucom</option><option value="Aluminio">Aluminio</option><option value="Animal">Animal</option><option value="Arena">Arena</option><option value="Asbesto friable">Asbesto friable</option><option value="Asbesto no friable">Asbesto no friable</option><option value="Asesoría">Asesoría</option><option value="Batería de Auto">Batería de Auto</option><option value="Biciclaje">Biciclaje</option><option value="Bidón Químico HDPE">Bidón Químico HDPE</option><option value="Binz">Binz</option><option value="Biocontaminados">Biocontaminados</option><option value="Biodigestión">Biodigestión</option><option value="Biodigestores">Biodigestores</option><option value="Biogas">Biogas</option><option value="Bodegas">Bodegas</option><option value="Bolsa plástica">Bolsa plástica</option><option value="Bolsos">Bolsos</option><option value="Bronce">Bronce</option><option value="Cables Eléctricos">Cables Eléctricos</option><option value="Capacitaciones">Capacitaciones</option><option value="Caracterización de residuos">Caracterización de residuos</option><option value="Carbono neutral">Carbono neutral</option><option value="Cárnicos">Cárnicos</option><option value="Cartón">Cartón</option><option value="Celulosa reciclada">Celulosa reciclada</option><option value="Cerámica">Cerámica</option><option value="Charlas de RCD">Charlas de RCD</option><option value="charlas y talleres">charlas y talleres</option><option value="Chatarra">Chatarra</option><option value="Chipeadoras">Chipeadoras</option><option value="Cobre">Cobre</option><option value="Colchones">Colchones</option><option value="Colillas">Colillas</option><option value="Compactadoras">Compactadoras</option><option value="Composteras">Composteras</option><option value="Construcción sostenible">Construcción sostenible</option><option value="Contenedores">Contenedores</option><option value="De todo">De todo</option><option value="Desinfectante">Desinfectante</option><option value="Desinfectantes">Desinfectantes</option><option value="Domiciliarios">Domiciliarios</option><option value="DS 148">DS 148</option><option value="DS 42">DS 42</option><option value="E-waste">E-waste</option><option value="Ecodiseño">Ecodiseño</option><option value="Eficiencia energetica">Eficiencia energetica</option><option value="Enfardadoras">Enfardadoras</option><option value="EPP">EPP</option><option value="Escombro">Escombro</option><option value="Escoria">Escoria</option><option value="Excavación">Excavación</option><option value="Fierro">Fierro</option><option value="FILM STRETCH">FILM STRETCH</option><option value="Grasas">Grasas</option><option value="HDPE">HDPE</option><option value="Hormigón">Hormigón</option><option value="Huella Hídrica">Huella Hídrica</option><option value="Industrial">Industrial</option><option value="Insumos">Insumos</option><option value="latas">latas</option><option value="Latas de Aluminio">Latas de Aluminio</option><option value="LDPE">LDPE</option><option value="Ley REP">Ley REP</option><option value="Libros">Libros</option><option value="Limpieza de pozos">Limpieza de pozos</option><option value="Lodos">Lodos</option><option value="Madera">Madera</option><option value="Maquinaria">Maquinaria</option><option value="Maxisacos">Maxisacos</option><option value="Merma">Merma</option><option value="Metales no ferrosos">Metales no ferrosos</option><option value="Mix Papel-Cartón">Mix Papel-Cartón</option><option value="Mix Plásticos">Mix Plásticos</option><option value="Mortalidad">Mortalidad</option><option value="Mortandad">Mortandad</option><option value="Motores">Motores</option><option value="Neumáticos">Neumáticos</option><option value="NFU">NFU</option><option value="Orgánicos">Orgánicos</option><option value="PAI">PAI</option><option value="Pallet">Pallet</option><option value="Papel">Papel</option><option value="PAS 40">PAS 40</option><option value="PAS 42">PAS 42</option><option value="Pesas">Pesas</option><option value="PET">PET</option><option value="Pilas Alcalinas">Pilas Alcalinas</option><option value="Placas electrónicas">Placas electrónicas</option><option value="Planes de manejo">Planes de manejo</option><option value="Planta de reciclaje">Planta de reciclaje</option><option value="Plásticos">Plásticos</option><option value="Plásticos Compostables">Plásticos Compostables</option><option value="Pluma">Pluma</option><option value="plumas">plumas</option><option value="Plumavit">Plumavit</option><option value="podas">podas</option><option value="PP">PP</option><option value="Productos circulares">Productos circulares</option><option value="Proyecto en manejo de residuos">Proyecto en manejo de residuos</option><option value="Puntos limpios">Puntos limpios</option><option value="pvc">pvc</option><option value="Radiadores">Radiadores</option><option value="RAEE">RAEE</option><option value="RAEE - METALES">RAEE - METALES</option><option value="Ramas">Ramas</option><option value="RCD">RCD</option><option value="REAS">REAS</option><option value="REP">REP</option><option value="Residuos Peligrosos- Residuos NO Peligrosos. Exclusiones •	SF6 (Hexafluoruro de Azufre) •	Óxido de Etileno •	Gas Halón •	Gases Refrigerantes  •	Bromuro de Metilo •	Acetileno">Residuos Peligrosos- Residuos NO Peligrosos. Exclusiones •	SF6 (Hexafluoruro de Azufre) •	Óxido de Etileno •	Gas Halón •	Gases Refrigerantes  •	Bromuro de Metilo •	Acetileno</option><option value="RESPEL">RESPEL</option><option value="RILES">RILES</option><option value="Riles y Lodos">Riles y Lodos</option><option value="Ruido">Ruido</option><option value="Segregacion de residuos">Segregacion de residuos</option><option value="Tambor Contaminado">Tambor Contaminado</option><option value="Tambor Metálico">Tambor Metálico</option><option value="Tambores">Tambores</option><option value="Tela gráfica">Tela gráfica</option><option value="Tetrapack">Tetrapack</option><option value="Textil">Textil</option><option value="Tierra">Tierra</option><option value="Tinetas">Tinetas</option><option value="Toner">Toner</option><option value="Tramitación sanitaria">Tramitación sanitaria</option><option value="valorizables">valorizables</option><option value="Valorización energética">Valorización energética</option><option value="Vidrio">Vidrio</option><option value="Visceras">Visceras</option><option value="Voluntariado">Voluntariado</option><option value="xxxxx">xxxxx</option><option value="Yeso-Cartón">Yeso-Cartón</option></select>
     </div>
     <div>
-      <label>Ubicacion / area de accion</label>
+      <label>Ubicación / área de acción</label>
       <select id="fUbic"><option value="">Todas</option><option value="Alajuela">Alajuela</option><option value="Angol">Angol</option><option value="Antofagasta">Antofagasta</option><option value="Araucanía">Araucanía</option><option value="Arequipa">Arequipa</option><option value="Arica">Arica</option><option value="Aysén">Aysén</option><option value="Biobío">Biobío</option><option value="Calama">Calama</option><option value="Caldera">Caldera</option><option value="Callao">Callao</option><option value="Cartago">Cartago</option><option value="Cauquenes">Cauquenes</option><option value="Chillan">Chillan</option><option value="Chiloé">Chiloé</option><option value="Chosica">Chosica</option><option value="Comas">Comas</option><option value="Concepción">Concepción</option><option value="Copiapó">Copiapó</option><option value="Coquimbo">Coquimbo</option><option value="Coronel">Coronel</option><option value="Coyhaique">Coyhaique</option><option value="Curicó">Curicó</option><option value="El Salvador">El Salvador</option><option value="Futaleufú">Futaleufú</option><option value="Heredia">Heredia</option><option value="Huancayo">Huancayo</option><option value="Huasco">Huasco</option><option value="Iquique">Iquique</option><option value="Isla de Pascua">Isla de Pascua</option><option value="La Pintana">La Pintana</option><option value="Lima">Lima</option><option value="Linares">Linares</option><option value="Los Andes">Los Andes</option><option value="Los Ángeles">Los Ángeles</option><option value="Los Ríos">Los Ríos</option><option value="Lurigancho">Lurigancho</option><option value="Maitencillo">Maitencillo</option><option value="maule">maule</option><option value="Melipilla">Melipilla</option><option value="Nacional">Nacional</option><option value="Ñuble">Ñuble</option><option value="O&#39;Higgins">O'Higgins</option><option value="Osorno">Osorno</option><option value="Ovalle">Ovalle</option><option value="Paracas">Paracas</option><option value="Pucón">Pucón</option><option value="Puerto Montt">Puerto Montt</option><option value="Puerto Varas">Puerto Varas</option><option value="Punta Arenas">Punta Arenas</option><option value="Quilpué">Quilpué</option><option value="Quintero">Quintero</option><option value="Rancagua">Rancagua</option><option value="Region de Aysen">Region de Aysen</option><option value="Region de los Lagos">Region de los Lagos</option><option value="Region de los Rios">Region de los Rios</option><option value="RM">RM</option><option value="Salamanca">Salamanca</option><option value="San Antonio">San Antonio</option><option value="San Felipe">San Felipe</option><option value="San Fernando">San Fernando</option><option value="San José">San José</option><option value="San Luis">San Luis</option><option value="Santa Anita">Santa Anita</option><option value="Santa Clara">Santa Clara</option><option value="Santa Cruz">Santa Cruz</option><option value="Serena">Serena</option><option value="Talca">Talca</option><option value="Talcahuano">Talcahuano</option><option value="Tarapacá">Tarapacá</option><option value="Temuco">Temuco</option><option value="Tierra Amarilla">Tierra Amarilla</option><option value="Tocopilla">Tocopilla</option><option value="Trujillo">Trujillo</option><option value="Valdivia">Valdivia</option><option value="Valle del Elqui">Valle del Elqui</option><option value="Vallenar">Vallenar</option><option value="Valparaíso">Valparaíso</option><option value="Villarrica">Villarrica</option><option value="Viña del mar">Viña del mar</option></select>
     </div>
     <div>
@@ -158,12 +158,12 @@ a { color:var(--blue); }
   </div>
 
   <div class="bar"><div id="bar" style="width: 100%;"></div></div>
-  <div class="status-msg" id="statusMsg">Listo - 752 proveedores · cruce OK (37 gestores)</div>
+  <div class="status-msg" id="statusMsg">Cargando…</div>
   <div class="repbar" id="repbar">
     <button onclick="openInforme()">Generar informe por empresa</button>
     <span class="toggle-hint">Elige una empresa y arma el informe comparativo de sus proveedores</span>
   </div>
-  <div class="count" id="count">749 proveedor(es) - ordenados por recomendacion</div>
+  <div class="count" id="count"></div>
   <div id="list"></div>
   </div>
   <div id="viewTar" style="display:none">
@@ -206,9 +206,9 @@ a { color:var(--blue); }
       <div class="span2"><label>Razón social, establecimiento, RUT o código RETC</label><input type="text" id="sfTexto" placeholder="Buscar..."></div>
       <div><label>Región</label><select id="sfRegion"></select></div>
       <div><label>Comuna</label><select id="sfComuna"></select></div>
-      <div><label>Nivel 1</label><select id="sfN1"></select></div>
-      <div><label>Nivel 2</label><select id="sfN2"></select></div>
-      <div><label>Nivel 3</label><select id="sfN3"></select></div>
+      <div><label>Tipo de operación</label><select id="sfN1"></select></div>
+      <div><label>Tratamiento</label><select id="sfN2"></select></div>
+      <div><label>Detalle</label><select id="sfN3"></select></div>
       <div><label>En ecosistema</label><select id="sfEco"><option value="">Todos</option><option value="si">Sí</option><option value="no">No</option></select></div>
       <div class="estados">
         <label class="chk"><input type="checkbox" id="sfActivos" checked> Solo tratamientos activos</label>
@@ -234,16 +234,16 @@ a { color:var(--blue); }
 </div>
 
 <!-- ?v=: subir el número al publicar cambios en estos archivos, para que el navegador no use la copia vieja -->
-<script src="js/comunas.js?v=3.80"></script>
-<script src="js/esquema.js?v=3.80"></script>
-<script src="js/tratamientos.js?v=3.80"></script>
-<script src="js/tarifas.js?v=3.80"></script>
-<script src="js/referenciales.js?v=3.80"></script>
-<script src="js/historial.js?v=3.80"></script>
-<script src="js/sinader.js?v=3.80"></script>
-<script src="js/nueva-tarifa.js?v=3.80"></script>
-<script src="js/editar-tarifas.js?v=3.80"></script>
-<script src="js/importar.js?v=3.80"></script>
+<script src="js/comunas.js?v=3.81"></script>
+<script src="js/esquema.js?v=3.81"></script>
+<script src="js/tratamientos.js?v=3.81"></script>
+<script src="js/tarifas.js?v=3.81"></script>
+<script src="js/referenciales.js?v=3.81"></script>
+<script src="js/historial.js?v=3.81"></script>
+<script src="js/sinader.js?v=3.81"></script>
+<script src="js/nueva-tarifa.js?v=3.81"></script>
+<script src="js/editar-tarifas.js?v=3.81"></script>
+<script src="js/importar.js?v=3.81"></script>
 <script>
 /* ============================================================
    FUENTES DE DATOS (lectura via gviz)
@@ -453,16 +453,16 @@ async function loadAll(){
   const bar = document.getElementById("bar");
   const msg = document.getElementById("statusMsg");
   tarifasInit();
-  msg.textContent = "Esperando inicio de sesion...";
+  msg.textContent = "Esperando inicio de sesión…";
   await exigirSesion();
   const tarifasP = loadTarifas();
   const sinaderP = loadSinader(); // no bloquea la carga de proveedores
-  msg.textContent = "Leyendo proveedores (espejo ClickUp) y tarifas...";
+  msg.textContent = "Cargando proveedores y tarifas…";
   try{
     SUPPLIERS = await loadMirror();
   }catch(e){
     bar.style.width="0%";
-    msg.innerHTML = "No se pudo leer el espejo de proveedores. Verifica que la planilla este compartida como <b>Cualquiera con el enlace -> Lector</b>.<br>Detalle: "+esc((e&&e.message)||String(e));
+    msg.innerHTML = "No se pudo leer el espejo de proveedores. Verifica que la planilla esté compartida como <b>Cualquiera con el enlace → Lector</b>.<br>Detalle: "+esc((e&&e.message)||String(e));
     return;
   }
   await tarifasP;
@@ -471,9 +471,10 @@ async function loadAll(){
   populateFilters();
   render();
   bar.style.width = "100%";
-  msg.textContent = "Listo - "+SUPPLIERS.length+" proveedores · tarifas "+TARIFAS_STATUS;
+  msg.textContent = SUPPLIERS.length+" proveedores · "+(TARIFAS_ERROR ? "⚠ No se pudieron cargar las tarifas: "+TARIFAS_ERROR : TARIFAS.filter(t => t.activo).length+" tarifas");
+  msg.classList.toggle("err", !!TARIFAS_ERROR);
   // El cruce por RUT necesita SINADER y proveedores: se dibuja cuando ambos están cargados.
-  sinaderP.then(()=>{ render(); renderSinader(); msg.textContent += " · SINADER "+SINADER_STATUS; });
+  sinaderP.then(()=>{ render(); renderSinader(); if (/^error/.test(SINADER_STATUS)) msg.textContent += " · ⚠ No se pudo cargar SINADER"; });
 }
 
 /* ============================================================
@@ -506,7 +507,7 @@ function renderComparativo(){
     rows.forEach(c=>{
       const best=rows.length>1 && c.n===mejor;
       const tag=c.rec?' <b style="color:#b45309">(recomendado)</b>':'';
-      html+='<tr'+(best?' class="best"':'')+'><td>'+esc(c.prov)+tag+(best?(paga?' \u2605 paga mas':' \u2605 mas economico'):'')+'</td><td>'+esc(c.servicio||'-')+'</td><td>'+fmtCLP(c.n)+'</td></tr>';
+      html+='<tr'+(best?' class="best"':'')+'><td>'+esc(c.prov)+tag+(best?(paga?' \u2605 paga m\u00e1s':' \u2605 m\u00e1s econ\u00f3mico'):'')+'</td><td>'+esc(c.servicio||'-')+'</td><td>'+fmtCLP(c.n)+'</td></tr>';
     });
     html+='</table>';
   });
@@ -553,7 +554,7 @@ function buildInforme(){
   if(!provs.length){
     html += '<p style="font-size:12.5px;color:#667085">No hay proveedores asociados a '+esc(emp)+' en la planilla.</p>';
   } else {
-    html += '<table><tr><th>Proveedor</th><th>Sucursal(es)</th><th>Correo</th><th>Telefono</th></tr>';
+    html += '<table><tr><th>Proveedor</th><th>Sucursal(es)</th><th>Correo</th><th>Teléfono</th></tr>';
     provs.forEach(p=>{
       const corr = p.s.correo || p.correoSheet || "-";
       html += '<tr><td>'+esc(p.s.name)+'</td><td>'+esc(p.sucursales.join(' · ')||'-')+'</td><td>'+esc(corr)+'</td><td>'+esc(p.s.telefono||'-')+'</td></tr>';
@@ -587,8 +588,8 @@ function buildInforme(){
   '</div><datalist id="recResiDL"></datalist>';
   html += '<div id="recsTable"></div>';
 
-  html += '<div class="campo-lbl">Recomendacion (texto)</div><div contenteditable="true" class="campo">Escribe aqui la recomendacion general...</div>';
-  html += '<div class="campo-lbl">Comentario</div><div contenteditable="true" class="campo">Escribe aqui un comentario...</div>';
+  html += '<div class="campo-lbl">Recomendación (texto)</div><div contenteditable="true" class="campo">Escribe aquí la recomendación general…</div>';
+  html += '<div class="campo-lbl">Comentario</div><div contenteditable="true" class="campo">Escribe aquí un comentario…</div>';
   CUR_PROVS = provs;
   body.innerHTML = html;
   renderRecs();
@@ -616,7 +617,7 @@ function addRec(){
 function removeRec(i){ RECS.splice(i,1); renderRecs(); renderComparativo(); }
 function renderRecs(){
   const c=document.getElementById("recsTable"); if(!c) return;
-  if(!RECS.length){ c.innerHTML='<p style="font-size:12px;color:#667085">Aun no agregas recomendaciones.</p>'; return; }
+  if(!RECS.length){ c.innerHTML='<p style="font-size:12px;color:#667085">Aún no agregas recomendaciones.</p>'; return; }
   c.innerHTML='<table><tr><th>Proveedor</th><th>Servicio</th><th>Residuo</th><th>Costo norm.</th><th>Unidad</th><th>Etiqueta</th><th></th></tr>'+
     RECS.map((r,i)=>{
       const sup = SUPPLIERS.find(x=>norm(x.name)===norm(r.prov));
@@ -789,7 +790,7 @@ function toggle(id){
   const el = document.getElementById("d-"+id);
   el.classList.add("open");
   const extra = [];
-  if(s.direccion) extra.push('<div class="meta"><b>Direccion:</b> '+esc(s.direccion)+'</div>');
+  if(s.direccion) extra.push('<div class="meta"><b>Dirección:</b> '+esc(s.direccion)+'</div>');
   if(s.cobertura) extra.push('<div class="meta"><b>Cobertura:</b> '+esc(s.cobertura)+'</div>');
   if(s.movimiento) extra.push('<div class="meta"><b>Movimiento:</b> '+esc(s.movimiento)+'</div>');
   extra.push(tarifasDetalleProveedor(s));
@@ -853,7 +854,7 @@ async function loadComments(id){
 }
 
 async function deleteComment(taskId, commentId){
-  if(!confirm("¿Eliminar este comentario de ClickUp? Esta accion no se puede deshacer.")) return;
+  if(!confirm("¿Eliminar este comentario de ClickUp? Esta acción no se puede deshacer.")) return;
   try{
     await api("delete", { commentId: commentId, taskId: taskId }, true);
     loadComments(taskId);
@@ -879,7 +880,7 @@ async function submitRating(id){
   const texto = (document.getElementById("rbtext-"+id).value||"").trim();
   const statusEl = document.getElementById("rbstatus-"+id);
   const btn = document.getElementById("rbbtn-"+id);
-  if(!n && !texto){ statusEl.textContent = "Elige una calificacion o escribe un comentario."; return; }
+  if(!n && !texto){ statusEl.textContent = "Elige una calificación o escribe un comentario."; return; }
   if(APPS_SCRIPT_URL.indexOf("PEGAR_AQUI") !== -1){
     statusEl.textContent = "Falta configurar APPS_SCRIPT_URL en el HTML.";
     return;

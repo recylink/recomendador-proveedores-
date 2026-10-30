@@ -296,7 +296,7 @@ function camposV2Html(v, proveedor) {
     campo("f_fuente", "Tipo de fuente *", selOtraHtml('id="f_fuente"', fuentesLista(), fuenteCanon(v.fuente), "— elegir —")) +
     campo("f_fuente_ref", "Referencia de la fuente <span class=\"muted\">· opcional</span>", inp("f_fuente_ref", v.fuente_ref, 'placeholder="Ej: Cotización N° 123, Contrato Sodimac 2026"')) +
     destinoHtml("f", v.destino, proveedor) +
-    campo("f_condicion_pago_dias", "Condición de pago (días) <span class=\"muted\">· Euro 120, resto 30</span>", inp("f_condicion_pago_dias", v.condicion_pago_dias, 'inputmode="numeric" placeholder="vacío = según la empresa"')) +
+    campo("f_condicion_pago_dias", "Condición de pago (días) <span class=\"muted\">· si lo dejas vacío: 120 días para Euro Constructora, 30 para el resto</span>", inp("f_condicion_pago_dias", v.condicion_pago_dias, 'inputmode="numeric" placeholder="según la empresa"')) +
     campo("f_comuna_destino", "Comuna de destino <span class=\"muted\">· opcional</span>", inp("f_comuna_destino", v.comuna_destino, 'list="comunaDestDL" autocomplete="off"') +
       '<datalist id="comunaDestDL">' + (typeof COMUNAS_LISTA !== "undefined" ? COMUNAS_LISTA : []).map(c => '<option value="' + esc(c) + '">').join('') + '</datalist>');
 }

@@ -47,7 +47,7 @@ function abrirNuevaTarifa(pre) {
         campo("n_motivo", "Motivo del precio *", sel("n_motivo", [["", "— elegir —"]].concat(MOTIVOS_PRECIO.map(x => [x, x])), "")) +
         campo("n_fuente", "Tipo de fuente *", selOtraHtml('id="n_fuente"', fuentesLista(), "", "— elegir —")) +
         campo("n_fuente_ref", "Referencia de la fuente <span class=\"muted\">· opcional</span>", inp("n_fuente_ref", "", 'placeholder="Ej: Cotización N° 123 del 15-10-2026"')) +
-        campo("n_pago", "Condición de pago (días) <span class=\"muted\">· vacío = Euro 120, resto 30</span>", inp("n_pago", "", 'inputmode="numeric"')) +
+        campo("n_pago", "Condición de pago (días) <span class=\"muted\">· si lo dejas vacío: 120 días para Euro Constructora, 30 para el resto</span>", inp("n_pago", "", 'inputmode="numeric"')) +
         campo("n_ref_comuna", "Comuna de origen de la referencial", inp("n_ref_comuna", "", 'list="ntComunaDL" autocomplete="off" placeholder="Si aplica a una comuna"')) +
         campo("n_ref_region", "…o región de origen", sel("n_ref_region", [["", "— elegir —"]].concat(Object.keys(REGIONES_COMUNAS).map(x => [x, x])), "")) +
         campo("n_vigente", "Vigente hasta <span class=\"muted\">· opcional</span>", '<input id="n_vigente" type="date">') +

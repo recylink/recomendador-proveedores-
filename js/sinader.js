@@ -246,7 +246,7 @@ function crearFichaSinader(i) {
     rut: g.rut, direccion: [e0.comuna, e0.region].filter(Boolean).join(", "),
     regiones: unicos(estabs.map(e => e.region)), actor: "Destinatario Final",
     categoria: "Tratamiento de residuos (almacenamiento, valorización y/o eliminación)",
-    nota: lineas.join("\n"), origen: "Desde DF SINADER: " + estabs.length + " establecimiento(s); se agregan a la descripción de la tarjeta."
+    nota: lineas.join("\n"), origen: "Desde Gestores SINADER: " + estabs.length + " establecimiento(s); se agregan a la descripción de la tarjeta."
   });
 }
 

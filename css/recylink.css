@@ -75,6 +75,7 @@ select:focus, input:focus, textarea:focus { outline:none; border-color:var(--rl-
 .bar { height:4px; background:var(--rl-gray-100); margin:0; border-radius:999px; }
 .bar > div { background:var(--rl-action); }
 .status-msg { font-size:12px; color:var(--rl-gray-500); margin:8px 0 12px; }
+.status-msg.err { color:#B42318; font-weight:600; }
 .repbar { position:static; background:none; border:none; padding:0; margin:0 0 4px; justify-content:space-between; }
 .repbar .toggle-hint { order:-1; font-size:13px; color:var(--rl-gray-500); }
 .count { font-size:14px; color:var(--rl-gray-600); margin:0 0 16px; }
